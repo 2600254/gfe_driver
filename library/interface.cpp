@@ -52,6 +52,9 @@
 #if defined(HAVE_LIVEGRAPH)
 #include "livegraph/livegraph_driver.hpp"
 #endif
+#if defined(HAVE_BACH)
+#include "bach/bach_driver.hpp"
+#endif
 #if defined(HAVE_TESEO)
 #include "teseo/teseo_driver.hpp"
 #include "teseo/teseo_real_vtx.hpp"
@@ -207,6 +210,15 @@ std::unique_ptr<Interface> generate_livegraph_rw(bool directed_graph){ // read-w
 }
 #endif
 
+#if defined(HAVE_BACH)
+std::unique_ptr<Interface> generate_bach_ro(bool directed_graph){ // read only transactions for Graphalytics
+    return unique_ptr<Interface>( new BACHDriver(directed_graph, /*read_only ? */ true));
+}
+std::unique_ptr<Interface> generate_bach_rw(bool directed_graph){ // read-write transactions for Graphalytics
+    return unique_ptr<Interface>( new BACHDriver(directed_graph, /*read_only ? */ false));
+}
+#endif
+
 #if defined(HAVE_TESEO)
 std::unique_ptr<Interface> generate_teseo(bool directed_graph){
     return unique_ptr<Interface>{ new TeseoDriver(directed_graph) };
@@ -320,6 +332,11 @@ vector<ImplementationManifest> implementations() {
     // v3 25/04/2021: Materialization step with a vector
     result.emplace_back("livegraph3_ro", "LiveGraph, use read-only transactions for the Graphalytics kernels", &generate_livegraph_ro);
     result.emplace_back("livegraph3_rw", "LiveGraph, use read-write transactions for the Graphalytics kernels", &generate_livegraph_rw);
+#endif
+
+#if defined(HAVE_BACH)
+    result.emplace_back("bach_ro", "BACH, use read-only transactions for the Graphalytics kernels", &generate_bach_ro);
+    result.emplace_back("bach_rw", "BACH, use read-write transactions for the Graphalytics kernels", &generate_bach_rw);
 #endif
 
 #if defined(HAVE_TESEO)

@@ -560,6 +560,37 @@ if ( test x"${with_livegraph}" != x"" && test x"${with_livegraph}" != "no" ); th
 fi
 
 #############################################################################
+# Support for the BACH framework
+# Usage:
+# --with-bach=/path/to/bach/lib
+#
+AC_ARG_WITH([bach], [AS_HELP_STRING([--with-bach@<:@=ARG@:>@], [
+    Link to the BACH library. The argument needs to be the path to the dynamic library.
+])], [])
+
+if ( test x"${with_bach}" != x"" && test x"${with_bach}" != "no" ); then
+
+    if( test x"${with_bach}" == x"yes" ); then
+        AC_MSG_ERROR(["the full path to the BACH library needs to be set, e.g. --with-bach=/path/to/bach/lib"]);
+    fi
+    
+    AC_MSG_NOTICE([BACH: checking whether Intel TBB is present in the machine...])
+    MY_INTEL_TBB()
+    
+    path_bach_library=$(realpath "${with_bach}")
+        AC_CHECK_FILE([${path_bach_library}],  
+        [ LIBS="-L${path_bach_library} -Wl,-rpath=${path_bach_library} ${LIBS}" ], 
+        [ AC_MSG_ERROR(["the path does not exist: ${path_bach_library}"]) ]
+    )
+    
+    AC_SEARCH_LIBS([_ZN4BACH2DB21BeginWriteTransactionEv], [bach], [], [ AC_MSG_ERROR([cannot link the library bach]) ])
+    
+    AC_MSG_NOTICE([BACH support enabled])
+    AS_VAR_APPEND([CPPFLAGS], [" -DHAVE_BACH"])
+fi
+
+
+#############################################################################
 # Support for the Sortledton
 # Usage:
 # --with-sortledton=/path/to/sortledton/build

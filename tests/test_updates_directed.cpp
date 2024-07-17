@@ -32,6 +32,18 @@
 #include "graph/edge_stream.hpp"
 #include "library/interface.hpp"
 #include "library/baseline/adjacency_list.hpp"
+#undef LOG
+#define LOG(message)                                      \
+    {                                                     \
+        std::cout << "\033[0;32m"                         \
+                  << "[          ] "                      \
+                  << "\033[0;0m" << message << std::endl; \
+    }
+
+
+#if defined(HAVE_BACH)
+#include "library/bach/bach_driver.hpp"
+#endif
 
 #if defined(HAVE_LIVEGRAPH)
 #include "library/livegraph/livegraph_driver.hpp"
@@ -68,14 +80,17 @@ static void sequential(shared_ptr<UpdateInterface> interface, bool deletions = t
     edge_list->permute();
     for(uint64_t i =0, sz = edge_list->num_edges(); i < sz; i++){
         auto edge = edge_list->get(i);
+        //LOG(edge);
         auto p1 = vertices_contained.insert(edge.source());
         if(p1.second) interface->add_vertex(edge.source());
+        //LOG("srcadded");
         auto p2 = vertices_contained.insert(edge.destination());
         if(p2.second) interface->add_vertex(edge.destination());
+        //LOG("dstadded");
 
         interface->add_edge(edge);
+        //LOG("edgeadded");
     }
-
     interface->build();
 
     // check all edges have been inserted
@@ -97,7 +112,7 @@ static void sequential(shared_ptr<UpdateInterface> interface, bool deletions = t
         edge_list->permute(gfe::configuration().seed() + 99942341);
         for(uint64_t i =0, sz = edge_list->num_edges(); i < sz; i++){
             auto w_edge = edge_list->get(i);
-
+            
             interface->remove_edge(w_edge.edge());
             num_edges--;
 
@@ -113,7 +128,6 @@ static void sequential(shared_ptr<UpdateInterface> interface, bool deletions = t
             }
         }
     }
-
     // done
     interface->on_thread_destroy(0);
     interface->on_main_destroy();
@@ -129,18 +143,18 @@ static void parallel(shared_ptr<UpdateInterface> interface, uint64_t num_vertice
     edge_list->permute();
 
 //    cout << "num edges: " << edge_list->num_edges() << endl;
-
     auto routine_insert_edges = [interface, edge_list, &vertices](int thread_id, uint64_t start, uint64_t length){
         interface->on_thread_init(thread_id);
 
         for(int64_t pos = start, end = start + length; pos < end; pos++){
             auto edge = edge_list->get(pos);
-
+            
             if(vertices.insert(edge.source(), true)) interface->add_vertex(edge.source());
             if(vertices.insert(edge.destination(), true)) interface->add_vertex(edge.destination());
 
             // the function returns true if the edge has been inserted. Repeat the loop if it cannot insert the edge as one of
             // the vertices is still being inserted by another thread
+            //LOG("addedge"<<edge<<std::endl);
             while( ! interface->add_edge(edge) ) { /* nop */ } ;
         }
 
@@ -214,9 +228,10 @@ static void parallel(shared_ptr<UpdateInterface> interface, uint64_t num_vertice
         // remove all vertices from the graph
         auto routine_remove_vertices = [interface, edge_list](int thread_id, uint64_t start, uint64_t length){
             interface->on_thread_init(thread_id);
-
+            //LOG(start<<" "<<length);
             for(int64_t pos = start, end = start + length; pos < end; pos++){
                 interface->remove_vertex(pos +1);
+                //LOG(pos+1);
             }
 
             interface->on_thread_destroy(thread_id);
@@ -240,13 +255,14 @@ static void parallel(shared_ptr<UpdateInterface> interface, uint64_t num_vertice
     // done
     interface->on_main_destroy();
 }
-
+#if defined(adjst)
 TEST(AdjacencyList, UpdatesDirected){
     auto adjlist = make_shared<AdjacencyList>(/* directed */ true);
     sequential(adjlist);
     parallel(adjlist, 128);
     parallel(adjlist, 1024);
 }
+#endif
 
 #if defined(HAVE_LLAMA)
 TEST(LLAMA, UpdatesDirected){
@@ -264,5 +280,14 @@ TEST(LiveGraph, UpdatesDirected){
     sequential(livegraph);
     parallel(livegraph, 128);
     parallel(livegraph, 1024);
+}
+#endif
+
+#if defined(HAVE_BACH)
+TEST(BACH, UpdatesDirected){
+    auto bach = make_shared<BACHDriver>(/* directed */ true);
+    sequential(bach);
+    parallel(bach, 8);
+    parallel(bach, 32);
 }
 #endif

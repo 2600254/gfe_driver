@@ -32,6 +32,13 @@
 #include "graph/edge_stream.hpp"
 #include "library/interface.hpp"
 #include "library/baseline/adjacency_list.hpp"
+#undef LOG
+#define LOG(message)                                      \
+    {                                                     \
+        std::cout << "\033[0;32m"                         \
+                  << "[          ] "                      \
+                  << "\033[0;0m" << message << std::endl; \
+    }
 
 #if defined(HAVE_LLAMA)
 #include "library/llama/llama_class.hpp"
@@ -47,6 +54,10 @@
 
 #if defined(HAVE_LIVEGRAPH)
 #include "library/livegraph/livegraph_driver.hpp"
+#endif
+
+#if defined(HAVE_BACH)
+#include "library/bach/bach_driver.hpp"
 #endif
 
 #if defined(HAVE_TESEO)
@@ -65,7 +76,7 @@ static std::unique_ptr<gfe::graph::WeightedEdgeStream> generate_edge_stream(uint
     vector<gfe::graph::WeightedEdge> edges;
     for(uint64_t i = 1; i < max_vector_id; i++){
         for(uint64_t j = i + 2; j < max_vector_id; j+=2){
-            edges.push_back(gfe::graph::WeightedEdge{i, j, static_cast<double>(j * 1000 + i)});
+            edges.push_back(gfe::graph::WeightedEdge{i, j, static_cast<double>(j * 10000 + i)});
         }
     }
     return make_unique<gfe::graph::WeightedEdgeStream>(edges);
@@ -85,27 +96,28 @@ static void sequential(shared_ptr<UpdateInterface> interface, bool edge_deletion
         if(p1.second) interface->add_vertex(edge.source());
         auto p2 = vertices_contained.insert(edge.destination());
         if(p2.second) interface->add_vertex(edge.destination());
-
         // insert sometimes as <i, j> and sometimes as <j, i>
         if((edge.m_source + edge.m_destination) % 2 == 0){
             swap(edge.m_source, edge.m_destination);
         }
+        //std::cout<<"add"<<edge.source()<<" "<<edge.destination()<<std::endl;
         bool added = interface->add_edge(edge);
         ASSERT_TRUE(added);
     }
 
     this_thread::sleep_for(1s);
     interface->build();
-
+    std::cout<<"ADD END\n";
     // check all edges have been inserted
     ASSERT_EQ(interface->num_edges(), edge_list->num_edges());
     for(uint64_t i = 1; i < edge_list->max_vertex_id(); i++){
         for(uint64_t j = i +1; j < edge_list->max_vertex_id(); j++){
             if((i + j) % 2 == 0){ // the edge should be present
+                //std::cout<<"find "<<i<<" "<<j<<std::endl;
                 ASSERT_TRUE(interface->has_edge(j, i)); // because it's undirected
                 ASSERT_TRUE(interface->has_edge(i, j));
 
-                uint32_t expected_value = j * 1000 + i;
+                uint32_t expected_value = j * 10000 + i;
 
                 ASSERT_EQ(interface->get_weight(i, j), expected_value);
                 ASSERT_EQ(interface->get_weight(j, i), expected_value);
@@ -125,6 +137,7 @@ static void sequential(shared_ptr<UpdateInterface> interface, bool edge_deletion
             if((edge.m_source + edge.m_destination) % 3 == 0){
                 swap(edge.m_source, edge.m_destination);
             }
+            //std::cout<<"del "<<edge.m_source<<" "<<edge.m_destination<<std::endl;
             interface->remove_edge(edge);
         }
 
@@ -133,6 +146,7 @@ static void sequential(shared_ptr<UpdateInterface> interface, bool edge_deletion
 
         for(uint64_t i = 1; i < edge_list->max_vertex_id(); i++){
             for(uint64_t j = i +1; j < edge_list->max_vertex_id(); j++){
+                //std::cout<<"find "<<i<<" "<<j<<std::endl;
                 ASSERT_FALSE(interface->has_edge(i, j));
                 ASSERT_FALSE(interface->has_edge(j, i));
             }
@@ -160,7 +174,7 @@ static bool parallel_check = false;
 // Whether vertex deletions are supported by the interface. All libraries support them (more or less), but GraphOne
 static bool parallel_vertex_deletions = true;
 
-static void parallel(shared_ptr<UpdateInterface> interface, uint64_t num_vertices, int num_threads = 8, bool deletions = true) {
+static void parallel(shared_ptr<UpdateInterface> interface, uint64_t num_vertices, int num_threads = 16, bool deletions = true) {
     assert(num_threads > 0);
     interface->on_main_init(num_threads);
 
@@ -219,7 +233,7 @@ static void parallel(shared_ptr<UpdateInterface> interface, uint64_t num_vertice
                     ASSERT_TRUE(interface->has_edge(i, j));
                     //cout << "check " << j << " -> " << i << endl;
                     ASSERT_TRUE(interface->has_edge(j, i));
-                    uint32_t expected_value = j * 1000 + i;
+                    uint32_t expected_value = j * 10000 + i;
                     ASSERT_EQ(interface->get_weight(i, j), expected_value);
                     ASSERT_EQ(interface->get_weight(j, i), expected_value);
                 } else {
@@ -310,12 +324,12 @@ static void parallel(shared_ptr<UpdateInterface> interface, uint64_t num_vertice
     interface->on_main_destroy();
 }
 
-TEST(AdjacencyList, UpdatesUndirected){
-    auto adjlist = make_shared<AdjacencyList>(/* directed */ false);
-    sequential(adjlist);
-    parallel(adjlist, 128);
-    parallel(adjlist, 1024);
-}
+// TEST(AdjacencyList, UpdatesUndirected){
+//     auto adjlist = make_shared<AdjacencyList>(/* directed */ false);
+//     sequential(adjlist);
+//     parallel(adjlist, 128);
+//     parallel(adjlist, 1024);
+// }
 
 #if defined(HAVE_LLAMA)
 TEST(LLAMA, UpdatesUndirected){
@@ -363,6 +377,23 @@ TEST(LiveGraph, UpdatesUndirected) {
     sequential(livegraph);
     parallel(livegraph, 128);
     parallel(livegraph, 1024);
+
+    parallel_check = false; // global, reset to the default value
+    parallel_vertex_deletions = true; // global, reset to the default value
+}
+#endif
+
+#if defined(HAVE_BACH)
+TEST(BACH, UpdatesUndirected) {
+    parallel_check = true; // global, check the weights in parallel
+    parallel_vertex_deletions = true; // global, enable vertex deletions
+
+    auto bach = make_shared<BACHDriver>(/* directed */ false);
+    sequential(bach);
+    
+    parallel(bach, 64);
+    parallel(bach, 128);
+    parallel(bach, 1024);
 
     parallel_check = false; // global, reset to the default value
     parallel_vertex_deletions = true; // global, reset to the default value

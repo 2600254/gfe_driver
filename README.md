@@ -14,6 +14,8 @@ execute the updates specified by a [graphlog file](https://github.com/whatsthecr
 the Graphalytics suite: BFS, PageRank (PR), local triangle counting (LCC), weighted shortest paths (SSSP), 
 weakly connected components (WCC) and community detection through label propagation (CDLP).  
 
+remove third-party/libcommon/src/CMakeLists.txt:33 "-Werror"
+
 ### Build 
 
 #### Requisites 
