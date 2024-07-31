@@ -583,7 +583,7 @@ if ( test x"${with_bach}" != x"" && test x"${with_bach}" != "no" ); then
         [ AC_MSG_ERROR(["the path does not exist: ${path_bach_library}"]) ]
     )
     
-    AC_SEARCH_LIBS([_ZN4BACH2DB21BeginWriteTransactionEv], [bach], [], [ AC_MSG_ERROR([cannot link the library bach]) ])
+    AC_SEARCH_LIBS([_ZN4bach2DB16BeginTransactionEv], [bach], [], [ AC_MSG_ERROR([cannot link the library bach]) ])
     
     AC_MSG_NOTICE([BACH support enabled])
     AS_VAR_APPEND([CPPFLAGS], [" -DHAVE_BACH"])

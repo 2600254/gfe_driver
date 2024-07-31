@@ -8192,6 +8192,88 @@ if ( test x"${with_bach}" != x"" && test x"${with_bach}" != "no" ); then
         as_fn_error $? "\"the full path to the BACH library needs to be set, e.g. --with-bach=/path/to/bach/lib\"" "$LINENO" 5;
     fi
 
+    { printf "%s\n" "$as_me:${as_lineno-$LINENO}: BACH: checking whether Intel TBB is present in the machine..." >&5
+printf "%s\n" "$as_me: BACH: checking whether Intel TBB is present in the machine..." >&6;}
+
+	if test x"${have_tbb}" == x"unknown"; then
+		have_tbb="yes" # assume so
+		ac_fn_cxx_check_header_compile "$LINENO" "tbb/tbb.h" "ac_cv_header_tbb_tbb_h" " /* avoid default includes */
+"
+if test "x$ac_cv_header_tbb_tbb_h" = xyes
+then :
+
+			{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for library containing TBB_runtime_interface_version" >&5
+printf %s "checking for library containing TBB_runtime_interface_version... " >&6; }
+if test ${ac_cv_search_TBB_runtime_interface_version+y}
+then :
+  printf %s "(cached) " >&6
+else $as_nop
+  ac_func_search_save_LIBS=$LIBS
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+namespace conftest {
+  extern "C" int TBB_runtime_interface_version ();
+}
+int
+main (void)
+{
+return conftest::TBB_runtime_interface_version ();
+  ;
+  return 0;
+}
+_ACEOF
+for ac_lib in '' tbb
+do
+  if test -z "$ac_lib"; then
+    ac_res="none required"
+  else
+    ac_res=-l$ac_lib
+    LIBS="-l$ac_lib  $ac_func_search_save_LIBS"
+  fi
+  if ac_fn_cxx_try_link "$LINENO"
+then :
+  ac_cv_search_TBB_runtime_interface_version=$ac_res
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.beam \
+    conftest$ac_exeext
+  if test ${ac_cv_search_TBB_runtime_interface_version+y}
+then :
+  break
+fi
+done
+if test ${ac_cv_search_TBB_runtime_interface_version+y}
+then :
+
+else $as_nop
+  ac_cv_search_TBB_runtime_interface_version=no
+fi
+rm conftest.$ac_ext
+LIBS=$ac_func_search_save_LIBS
+fi
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $ac_cv_search_TBB_runtime_interface_version" >&5
+printf "%s\n" "$ac_cv_search_TBB_runtime_interface_version" >&6; }
+ac_res=$ac_cv_search_TBB_runtime_interface_version
+if test "$ac_res" != no
+then :
+  test "$ac_res" = "none required" || LIBS="$ac_res $LIBS"
+  CPPFLAGS="${CPPFLAGS} -DHAVE_TBB"
+else $as_nop
+  have_tbb="no"
+fi
+
+
+else $as_nop
+  have_tbb="no"
+fi
+
+	fi
+
+	if test x"${have_tbb}" == x"no"; then
+		as_fn_error $? "\"The dependency library Intel TBB is not available in this machine\"" "$LINENO" 5;
+	fi
+
+
     path_bach_library=$(realpath "${with_bach}")
         as_ac_File=`printf "%s\n" "ac_cv_file_${path_bach_library}" | $as_tr_sh`
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for ${path_bach_library}" >&5

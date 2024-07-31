@@ -113,7 +113,7 @@ static void sequential(shared_ptr<UpdateInterface> interface, bool edge_deletion
     for(uint64_t i = 1; i < edge_list->max_vertex_id(); i++){
         for(uint64_t j = i +1; j < edge_list->max_vertex_id(); j++){
             if((i + j) % 2 == 0){ // the edge should be present
-                //std::cout<<"find "<<i<<" "<<j<<std::endl;
+                //std::cout<<"find yes"<<i<<" "<<j<<std::endl;
                 ASSERT_TRUE(interface->has_edge(j, i)); // because it's undirected
                 ASSERT_TRUE(interface->has_edge(i, j));
 
@@ -122,6 +122,7 @@ static void sequential(shared_ptr<UpdateInterface> interface, bool edge_deletion
                 ASSERT_EQ(interface->get_weight(i, j), expected_value);
                 ASSERT_EQ(interface->get_weight(j, i), expected_value);
             } else {
+                //std::cout<<"find no"<<i<<" "<<j<<std::endl;
                 ASSERT_FALSE(interface->has_edge(i, j));
                 ASSERT_FALSE(interface->has_edge(j, i));
             }
@@ -146,7 +147,7 @@ static void sequential(shared_ptr<UpdateInterface> interface, bool edge_deletion
 
         for(uint64_t i = 1; i < edge_list->max_vertex_id(); i++){
             for(uint64_t j = i +1; j < edge_list->max_vertex_id(); j++){
-                //std::cout<<"find "<<i<<" "<<j<<std::endl;
+                //std::cout<<"find deleted"<<i<<" "<<j<<std::endl;
                 ASSERT_FALSE(interface->has_edge(i, j));
                 ASSERT_FALSE(interface->has_edge(j, i));
             }
@@ -391,9 +392,14 @@ TEST(BACH, UpdatesUndirected) {
     auto bach = make_shared<BACHDriver>(/* directed */ false);
     sequential(bach);
     
+    std::cout<<"begin parallel"<<64<<std::endl;
     parallel(bach, 64);
+    std::cout<<"begin parallel"<<128<<std::endl;
     parallel(bach, 128);
-    parallel(bach, 1024);
+    std::cout<<"begin parallel"<<512<<std::endl;
+    parallel(bach, 512);
+    std::cout<<1024<<std::endl;
+    parallel(bach,1024);
 
     parallel_check = false; // global, reset to the default value
     parallel_vertex_deletions = true; // global, reset to the default value

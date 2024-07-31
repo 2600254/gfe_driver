@@ -170,25 +170,18 @@ namespace gfe::library
         if (inserted)
         {
             bach::vertex_t internal_id = 0;
-            bool done = false;
-            do
-            {
-                // try
-                // {
-                auto tx = db->BeginWriteTransaction();
-                string_view data{(char *)&external_id, sizeof(external_id)};
-                internal_id = tx.AddVertex(0, data);
-                // LOG(external_id<<" "<<((uint64_t*)(data.data()))[0]);
-                // string_view res=tx.GetVertex(internal_id,0);
-                // LOG(((uint64_t*)(res.data()))[0]);
-                done = true;
-                // }
-                // catch (lg::Transaction::RollbackExcept &e)
-                // {
-                //     COUT_DEBUG("Rollback, vertex id: " << external_id);
-                //     // retry ...
-                // }
-            } while (!done);
+            auto tx = db->BeginTransaction();
+            string_view data{(char *)&external_id, sizeof(external_id)};
+            internal_id = tx.AddVertex(0, data);
+            // LOG(external_id<<" "<<((uint64_t*)(data.data()))[0]);
+            // string_view res=tx.GetVertex(internal_id,0);
+            // LOG(((uint64_t*)(res.data()))[0]);
+            // }
+            // catch (lg::Transaction::RollbackExcept &e)
+            // {
+            //     COUT_DEBUG("Rollback, vertex id: " << external_id);
+            //     // retry ...
+            // }
 
             accessor->second = internal_id;
             m_num_vertices++;
@@ -211,7 +204,7 @@ namespace gfe::library
             {
                 // try
                 // {
-                auto tx = db->BeginWriteTransaction();
+                auto tx = db->BeginTransaction();
                 tx.DelVertex(internal_id, 0);
                 done = true;
                 // }
@@ -254,7 +247,7 @@ namespace gfe::library
         {
             // try
             // {
-            auto tx = db->BeginWriteTransaction();
+            auto tx = db->BeginTransaction();
             // insert the new edge only if it doesn't already exist
             auto lg_weight = tx.GetEdge(internal_source_id, internal_destination_id, 0);
             // LOG("found "<<lg_weight);
@@ -343,7 +336,7 @@ namespace gfe::library
         {
             // try
             // {
-            auto tx = db->BeginWriteTransaction();
+            auto tx = db->BeginTransaction();
             // create the vertices in BACH
             if (insert_source)
             {
@@ -405,12 +398,13 @@ namespace gfe::library
         }
         bach::vertex_t internal_source_id = slock1->second;
         bach::vertex_t internal_destination_id = slock2->second;
-        auto tx = db->BeginWriteTransaction();
+        auto tx = db->BeginTransaction();
         tx.DelEdge(internal_source_id, internal_destination_id, /* label */ 0);
         if (!m_is_directed)
         { // undirected graph
             tx.DelEdge(internal_destination_id, internal_source_id, /* label */ 0);
         }
+        m_num_edges--;
         return true;
     }
 
@@ -428,12 +422,13 @@ namespace gfe::library
         }
         bach::vertex_t internal_source_id = slock1->second;
         bach::vertex_t internal_destination_id = slock2->second;
-        // LOG("inter "<<internal_source_id<<" "<<internal_destination_id);
-        auto tx = db->BeginReadTransaction();
+        //LOG("inter "<<internal_source_id<<" "<<internal_destination_id);
+        auto tx = db->BeginReadOnlyTransaction();
         bach::edge_property_t lg_weight = tx.GetEdge(internal_source_id, internal_destination_id, /* label */ 0);
         double weight = numeric_limits<double>::signaling_NaN();
         if (lg_weight != std::numeric_limits<double>::max())
         { // the edge exists
+            //std::cout<<lg_weight<<" "<<std::numeric_limits<double>::max()<<std::endl;
             weight = lg_weight;
         }
 
@@ -450,7 +445,7 @@ namespace gfe::library
         out << "[BACH] num vertices: " << m_num_vertices << ", num edges: " << m_num_edges << ", "
                                                                                               "directed graph: "
             << boolalpha << is_directed() << ", read only txn for graphalytics: " << m_read_only << endl;
-        auto tx = db->BeginReadTransaction();
+        auto tx = db->BeginReadOnlyTransaction();
         const uint64_t max_vertex_id = tx.GetVertexNum(0);
         for (uint64_t internal_source_id = 0; internal_source_id < max_vertex_id; internal_source_id++)
         {
@@ -461,7 +456,7 @@ namespace gfe::library
             out << "[" << internal_source_id << ", external_id: " << external_id << "]";
             { // outgoing edges
                 out << " outgoing edges: ";
-                auto answer = tx.GetEdges(internal_source_id,0);
+                auto answer = tx.GetEdges(internal_source_id, 0);
                 bool first = true;
                 for (auto &i : *answer)
                 {
@@ -615,7 +610,7 @@ them in parent array as negative numbers. Thus the encoding of parent is:
 
             if (distances[u] < 0)
             { // the node has not been visited yet
-                auto answer = transaction.GetEdges(u,0);
+                auto answer = transaction.GetEdges(u, 0);
                 for (auto &i : *answer)
                 {
                     uint64_t dst = i.first;
@@ -649,7 +644,7 @@ them in parent array as negative numbers. Thus the encoding of parent is:
             {
                 int64_t u = *q_iter;
                 COUT_DEBUG_BFS("explore: " << u);
-                auto answer = transaction.GetEdges( u,0);
+                auto answer = transaction.GetEdges(u, 0);
                 for (auto &i : *answer)
                 {
                     uint64_t dst = i.first;
@@ -708,7 +703,7 @@ them in parent array as negative numbers. Thus the encoding of parent is:
             else
             { // the vertex exists
                 // Retrieve the out degree for the vertex n
-                uint64_t out_degree = transaction.GetEdges(n,0)->size();
+                uint64_t out_degree = transaction.GetEdges(n, 0)->size();
                 distances[n] = out_degree != 0 ? -out_degree : -1;
             }
         }
@@ -733,7 +728,7 @@ them in parent array as negative numbers. Thus the encoding of parent is:
         front.reset();
         int64_t edges_to_check = num_edges; // g.num_edges_directed();
 
-        int64_t scout_count = transaction.GetEdges(root,0)->size();
+        int64_t scout_count = transaction.GetEdges(root, 0)->size();
         int64_t distance = 1; // current distance
 
         while (!timer.is_timeout() && !queue.empty())
@@ -778,7 +773,7 @@ them in parent array as negative numbers. Thus the encoding of parent is:
         utility::TimeoutService timeout{m_timeout};
         Timer timer;
         timer.start();
-        bach::Transaction transaction = m_read_only ? db->BeginReadTransaction() : db->BeginWriteTransaction();
+        bach::Transaction transaction = m_read_only ? db->BeginReadOnlyTransaction() : db->BeginTransaction();
         uint64_t max_vertex_id = transaction.GetVertexNum(0);
         uint64_t num_vertices = m_num_vertices;
         uint64_t num_edges = m_num_edges;
@@ -877,7 +872,7 @@ them in parent array as negative numbers. Thus the encoding of parent is:
             // compute the outdegree of the vertex
             if (!transaction.GetVertex(v, 0)->empty())
             { // check the vertex exists
-                uint64_t degree = transaction.GetEdges( v,0)->size();
+                uint64_t degree = transaction.GetEdges(v, 0)->size();
                 degrees[v] = degree;
             }
             else
@@ -950,7 +945,7 @@ them in parent array as negative numbers. Thus the encoding of parent is:
         utility::TimeoutService timeout{m_timeout};
         Timer timer;
         timer.start();
-        bach::Transaction transaction = m_read_only ? db->BeginReadTransaction() : db->BeginWriteTransaction();
+        bach::Transaction transaction = m_read_only ? db->BeginReadOnlyTransaction() : db->BeginTransaction();
         uint64_t num_vertices = m_num_vertices;
         uint64_t max_vertex_id = transaction.GetVertexNum(0);
 
@@ -1076,7 +1071,7 @@ them in parent array as negative numbers. Thus the encoding of parent is:
                 if (comp[u] == numeric_limits<uint64_t>::max())
                     continue; // the vertex does not exist
 
-                auto answer = transaction.GetEdges(u,0);
+                auto answer = transaction.GetEdges(u, 0);
                 for (auto &i : *answer)
                 {
                     uint64_t v = i.first;
@@ -1125,7 +1120,7 @@ them in parent array as negative numbers. Thus the encoding of parent is:
         utility::TimeoutService timeout{m_timeout};
         Timer timer;
         timer.start();
-        auto transaction = m_read_only ? db->BeginReadTransaction() : db->BeginWriteTransaction();
+        auto transaction = m_read_only ? db->BeginReadOnlyTransaction() : db->BeginTransaction();
         uint64_t max_vertex_id = transaction.GetVertexNum(0);
 
         // run wcc
@@ -1193,7 +1188,7 @@ them in parent array as negative numbers. Thus the encoding of parent is:
 
                 // compute the histogram from both the outgoing & incoming edges. The aim is to find the number of each label
                 // is shared among the neighbours of node_id
-                auto answer = transaction.GetEdges(v,0);
+                auto answer = transaction.GetEdges(v, 0);
                 for (auto &i : *answer)
                 {
                     uint64_t u = i.first;
@@ -1240,7 +1235,7 @@ them in parent array as negative numbers. Thus the encoding of parent is:
         utility::TimeoutService timeout{m_timeout};
         Timer timer;
         timer.start();
-        auto transaction = m_read_only ? db->BeginReadTransaction() : db->BeginWriteTransaction();
+        auto transaction = m_read_only ? db->BeginReadOnlyTransaction() : db->BeginTransaction();
         uint64_t max_vertex_id = transaction.GetVertexNum(0);
 
         // Run the CDLP algorithm
@@ -1295,7 +1290,7 @@ them in parent array as negative numbers. Thus the encoding of parent is:
             else
             {
                 { // out degree, restrict the scope
-                    uint32_t count = transaction.GetEdges(v,0)->size();
+                    uint32_t count = transaction.GetEdges(v, 0)->size();
                     degrees_out[v] = count;
                 }
             }
@@ -1322,14 +1317,14 @@ them in parent array as negative numbers. Thus the encoding of parent is:
             unordered_set<uint64_t> neighbours;
 
             { // Fetch the list of neighbours of v
-                auto answer = transaction.GetEdges(v,0);
+                auto answer = transaction.GetEdges(v, 0);
                 for (auto &i : *answer)
                     neighbours.insert(i.first);
             }
 
             // again, visit all neighbours of v
             // for directed graphs, edges1 contains the intersection of both the incoming and the outgoing edges
-            auto answer = transaction.GetEdges(v,0);
+            auto answer = transaction.GetEdges(v, 0);
             for (auto &iu : *answer)
             {
                 uint64_t u = iu.first;
@@ -1337,7 +1332,7 @@ them in parent array as negative numbers. Thus the encoding of parent is:
                 assert(neighbours.count(u) == 1 && "The set `neighbours' should contain all neighbours of v");
 
                 // For the Graphalytics spec v 0.9.0, only consider the outgoing edges for the neighbours u
-                auto answer2 = transaction.GetEdges( u,0);
+                auto answer2 = transaction.GetEdges(u, 0);
                 for (auto &uj : *answer2)
                 {
                     uint64_t w = uj.first;
@@ -1371,7 +1366,7 @@ them in parent array as negative numbers. Thus the encoding of parent is:
         utility::TimeoutService timeout{m_timeout};
         Timer timer;
         timer.start();
-        bach::Transaction transaction = m_read_only ? db->BeginReadTransaction() : db->BeginWriteTransaction();
+        bach::Transaction transaction = m_read_only ? db->BeginReadOnlyTransaction() : db->BeginTransaction();
         uint64_t max_vertex_id = transaction.GetVertexNum(0);
 
         // Run the LCC algorithm
@@ -1460,7 +1455,7 @@ them in parent array as negative numbers. Thus the encoding of parent is:
                     NodeID u = frontier[i];
                     if (dist[u] >= delta * static_cast<WeightT>(curr_bin_index))
                     {
-                        auto answer = transaction.GetEdges( u,0);
+                        auto answer = transaction.GetEdges(u, 0);
                         for (auto &i : *answer)
                         {
                             uint64_t v = i.first;
@@ -1536,7 +1531,7 @@ them in parent array as negative numbers. Thus the encoding of parent is:
         utility::TimeoutService timeout{m_timeout};
         Timer timer;
         timer.start();
-        bach::Transaction transaction = m_read_only ? db->BeginReadTransaction() : db->BeginWriteTransaction();
+        bach::Transaction transaction = m_read_only ? db->BeginReadOnlyTransaction() : db->BeginTransaction();
         uint64_t num_edges = m_num_edges;
         uint64_t max_vertex_id = transaction.GetVertexNum(0);
         uint64_t root = ext2int(source_vertex_id);

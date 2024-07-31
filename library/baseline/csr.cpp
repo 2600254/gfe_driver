@@ -72,7 +72,7 @@ CSR::CSR(bool is_directed, bool numa_interleaved) : m_is_directed(is_directed), 
     ERROR("[CSR] Cannot allocate the memory interleaved, dependency on libnuma missing");
 #else
     if(numa_available() < 0){
-        ERROR("[CSR] Cannot allocate the memory interleaved, a call to numa_available() returns a negative value (=> NUMA not available)");
+        //ERROR("[CSR] Cannot allocate the memory interleaved, a call to numa_available() returns a negative value (=> NUMA not available)");
     }
 #endif
 }
