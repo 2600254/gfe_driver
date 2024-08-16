@@ -16,14 +16,14 @@ namespace BACH
 	struct Options
 	{
 		std::string STORAGE_DIR = "./output/db_storage";
-		size_t MEM_TABLE_MAX_SIZE = 16 * 1024;
+		size_t MEM_TABLE_MAX_SIZE = 128 * 1024;
 		size_t VERTEX_PROPERTY_MAX_SIZE = 64 * 1024 * 1024;
-		vertex_t MERGE_NUM = 4;
-		vertex_t MIN_MERGE_NUM = 20;
+		vertex_t MERGE_NUM = 32;
 		size_t READ_BUFFER_SIZE = 1024 * 1024;
 		size_t WRITE_BUFFER_SIZE = 1024 * 1024;
 		size_t NUM_OF_COMPACTION_THREAD = 1;
 		size_t QUERY_LIST_SIZE = 160;
+		size_t MAX_FILE_READER_CACHE_SIZE = 64;
 		double FALSE_POSITIVE = 0.01;
 	};
 #else
@@ -49,7 +49,8 @@ namespace bach
 		Transaction BeginReadOnlyTransaction();
 		void AddVertexLabel(std::string label_name);
 		void AddEdgeLabel(std::string label_name,
-			std::string src_label_name, std::string dst_label_name);
+						  std::string src_label_name, std::string dst_label_name);
+
 	private:
 		const std::unique_ptr<BACH::DB> db;
 	};
@@ -64,13 +65,13 @@ namespace bach
 		vertex_t GetVertexNum(label_t label);
 
 		void PutEdge(vertex_t src, vertex_t dst, label_t label,
-			edge_property_t property, bool delete_old = false);
+					 edge_property_t property, bool delete_old = false);
 		void DelEdge(vertex_t src, vertex_t dst, label_t label);
 		edge_property_t GetEdge(
 			vertex_t src, vertex_t dst, label_t label);
 		std::shared_ptr<std::vector<std::pair<vertex_t, edge_property_t>>>
-			GetEdges(vertex_t src, label_t label,
-				bool (*func)(edge_property_t) = [](edge_property_t x) {return true; });
+		GetEdges(vertex_t src, label_t label, bool (*func)(edge_property_t) = [](edge_property_t x)
+											  { return true; });
 
 	private:
 		const std::unique_ptr<BACH::Transaction> txn;
