@@ -150,4 +150,11 @@ double Aging2Experiment::progress_so_far() {
     return m_master->progress_so_far();
   }
 }
+uint64_t Aging2Experiment::num_operations_sofar() const {
+  if (m_master == nullptr) {
+    return 0.0;
+  } else {
+    return m_master->num_operations_sofar();
+  }
+}
 } // namespace

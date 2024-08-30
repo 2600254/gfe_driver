@@ -21,6 +21,7 @@
 #include <cinttypes>
 #include <memory>
 #include <ostream>
+#include <fstream>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -131,7 +132,8 @@ public:
     /**
      * Execute the experiment
      */
-    std::chrono::microseconds execute();
+    std::chrono::microseconds execute(std::chrono::time_point<std::chrono::_V2::steady_clock> begin=
+    std::chrono::time_point<std::chrono::_V2::steady_clock>(),bool booo=false);
 
     /**
      * Report the execution results

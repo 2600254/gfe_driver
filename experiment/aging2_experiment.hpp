@@ -127,6 +127,8 @@ public:
     Aging2Result execute();
 
     double progress_so_far();
+
+    uint64_t num_operations_sofar() const;
 };
 
 } // namespace

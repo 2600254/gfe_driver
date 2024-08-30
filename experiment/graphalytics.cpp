@@ -120,8 +120,11 @@ ostream& operator<<(std::ostream& out, const GraphalyticsAlgorithms& props){
  ****************************************************************************/
 GraphalyticsSequential::GraphalyticsSequential(std::shared_ptr<gfe::library::GraphalyticsInterface> interface, uint64_t num_repetitions, const GraphalyticsAlgorithms& properties) :
         m_interface(interface), m_num_repetitions(num_repetitions), m_properties(properties) { }
-
-std::chrono::microseconds GraphalyticsSequential::execute(){
+#define OUT(x) if(booo)_out<<x
+#define TIME std::chrono::duration_cast<std::chrono::milliseconds>(chrono::steady_clock::now()-begin).count()
+std::chrono::microseconds GraphalyticsSequential::execute(
+    std::chrono::time_point<std::chrono::_V2::steady_clock>  begin,bool booo){
+    std::ofstream _out("Algorithm.txt");
     auto interface = m_interface.get();
     constexpr uint64_t max_num_errors = 10; // if validation is enabled
 
@@ -132,6 +135,7 @@ std::chrono::microseconds GraphalyticsSequential::execute(){
 
         if(m_properties.bfs.m_enabled){
             LOG("Execution " << (i+1) << "/" << m_num_repetitions << ": BFS from source vertex: " << m_properties.bfs.m_source_vertex);
+            OUT(i+1 << " BFS begin "<< TIME<<std::endl);
             string path_tmp = get_temporary_path("bfs", i);
             const char* path_result = m_validate_output_enabled ? path_tmp.c_str() : nullptr;
             try {
@@ -139,6 +143,7 @@ std::chrono::microseconds GraphalyticsSequential::execute(){
                 interface->bfs(m_properties.bfs.m_source_vertex, path_result);
               t_local.stop();
                 LOG(">> BFS Execution time: " << t_local);
+                OUT(i+1 << " BFS end "<< TIME<<std::endl);
                 m_exec_bfs.push_back(t_local.microseconds());
 
                 if(m_validate_output_enabled){
@@ -166,6 +171,7 @@ std::chrono::microseconds GraphalyticsSequential::execute(){
 
         if(m_properties.cdlp.m_enabled){
             LOG("Execution " << (i+1) << "/" << m_num_repetitions << ": CDLP, max_iterations: " << m_properties.cdlp.m_max_iterations);
+            OUT(i+1 << " CDLP begin "<< TIME<<std::endl);
             string path_tmp = get_temporary_path("cdlp", i);
             const char* path_result = m_validate_output_enabled ? path_tmp.c_str() : nullptr;
             try {
@@ -173,6 +179,7 @@ std::chrono::microseconds GraphalyticsSequential::execute(){
                 interface->cdlp(m_properties.cdlp.m_max_iterations, path_result);
                 t_local.stop();
                 LOG(">> CDLP Execution time: " << t_local);
+                OUT(i+1 << " CDLP end "<< TIME<<std::endl);
                 m_exec_cdlp.push_back(t_local.microseconds());
 
                 if(m_validate_output_enabled){
@@ -200,6 +207,7 @@ std::chrono::microseconds GraphalyticsSequential::execute(){
 
         if(m_properties.lcc.m_enabled){
             LOG("Execution " << (i+1) << "/" << m_num_repetitions << ": LCC");
+            OUT(i+1 << " LCC begin "<< TIME<<std::endl);
             string path_tmp = get_temporary_path("lcc", i);
             const char* path_result = m_validate_output_enabled ? path_tmp.c_str() : nullptr;
             try {
@@ -207,6 +215,7 @@ std::chrono::microseconds GraphalyticsSequential::execute(){
                 interface->lcc(path_result);
                 t_local.stop();
                 LOG(">> LCC Execution time: " << t_local);
+                OUT(i+1 << " LCC end "<< TIME<<std::endl);
                 m_exec_lcc.push_back(t_local.microseconds());
 
                 if(m_validate_output_enabled){
@@ -234,6 +243,7 @@ std::chrono::microseconds GraphalyticsSequential::execute(){
 
         if(m_properties.pagerank.m_enabled){
             LOG("Execution " << (i+1) << "/" << m_num_repetitions << ": PageRank, damping factor: " << m_properties.pagerank.m_damping_factor << ", num_iterations: " << m_properties.pagerank.m_num_iterations);
+            OUT(i+1 << " pagerank begin "<< TIME<<std::endl);
             string path_tmp = get_temporary_path("pagerank", i);
             const char* path_result = m_validate_output_enabled ? path_tmp.c_str() : nullptr;
             try {
@@ -241,6 +251,7 @@ std::chrono::microseconds GraphalyticsSequential::execute(){
                 interface->pagerank(m_properties.pagerank.m_num_iterations, m_properties.pagerank.m_damping_factor, path_result);
                 t_local.stop();
                 LOG(">> PageRank Execution time: " << t_local);
+                OUT(i+1 << " pagerank end "<< TIME<<std::endl);
                 m_exec_pagerank.push_back(t_local.microseconds());
 
                 if(m_validate_output_enabled){
@@ -268,6 +279,7 @@ std::chrono::microseconds GraphalyticsSequential::execute(){
 
         if(m_properties.sssp.m_enabled){
             LOG("Execution " << (i+1) << "/" << m_num_repetitions << ": SSSP, source: " << m_properties.sssp.m_source_vertex);
+            OUT(i+1 << " SSSP begin "<< TIME<<std::endl);
             string path_tmp = get_temporary_path("sssp", i);
             const char* path_result = m_validate_output_enabled ? path_tmp.c_str() : nullptr;
             try {
@@ -275,6 +287,7 @@ std::chrono::microseconds GraphalyticsSequential::execute(){
                 interface->sssp(m_properties.sssp.m_source_vertex, path_result);
                 t_local.stop();
                 LOG(">> SSSP Execution time: " << t_local);
+                OUT(i+1 << " SSSP begin "<< TIME<<std::endl);
                 m_exec_sssp.push_back(t_local.microseconds());
 
                 if(m_validate_output_enabled){
@@ -301,6 +314,7 @@ std::chrono::microseconds GraphalyticsSequential::execute(){
         }
         if(m_properties.wcc.m_enabled){
             LOG("Execution " << (i+1) << "/" << m_num_repetitions << ": WCC");
+            OUT(i+1 << " WCC begin "<< TIME<<std::endl);
             string path_tmp = get_temporary_path("wcc", i);
             const char* path_result = m_validate_output_enabled ? path_tmp.c_str() : nullptr;
             try {
@@ -308,6 +322,7 @@ std::chrono::microseconds GraphalyticsSequential::execute(){
                 interface->wcc(path_result);
                 t_local.stop();
                 LOG(">> WCC Execution time: " << t_local);
+                OUT(i+1 << " WCC begin "<< TIME<<std::endl);
                 m_exec_wcc.push_back(t_local.microseconds());
 
                 if(m_validate_output_enabled){

@@ -79,9 +79,6 @@ class Aging2Master {
     // Save the current results in `m_results'
     void store_results();
 
-    // Retrieve the current number of operations performed so far by the workers
-    uint64_t num_operations_sofar() const;
-
     // Wait for the workers to complete, record the throughput in the meanwhile
     void wait_and_record();
 
@@ -119,6 +116,9 @@ public:
     const Aging2Experiment& parameters() const { return m_parameters; }
 
     double progress_so_far() const;
+    
+    // Retrieve the current number of operations performed so far by the workers
+    uint64_t num_operations_sofar() const;
 };
 
 }
