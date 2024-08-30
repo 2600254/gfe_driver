@@ -229,6 +229,8 @@ void Aging2Master::remove_vertices(){
 Aging2Result Aging2Master::execute(){
     load_edges();
     if(parameters().m_measure_latency) prepare_latencies();
+    std::cout<<"input 0 to run aging\n";
+    int x;cin>>x;
     do_run_experiment();
     remove_vertices();
 

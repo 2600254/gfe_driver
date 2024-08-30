@@ -235,7 +235,9 @@ static void run_standalone(int argc, char* argv[]){
                 exp_seq.set_validate_remap_vertices( path_graph );
             }
         }
-
+        int x;
+        std::cout<<"input any number to run algorithm"<<std::endl;
+        std::cin>>x;
         exp_seq.execute();
         exp_seq.report(configuration().has_database());
     }

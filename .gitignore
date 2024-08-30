@@ -18,6 +18,11 @@ _Deparsed_XSubs.pm
 /Debug/
 /Release/
 /buildlive/
+/buildllama
+/buildone
 /.vscode/
 /test.*
 /testmem.*
+configure~
+configure
+testbach.sh

@@ -100,6 +100,9 @@ chrono::microseconds InsertOnly::execute() {
     // Execute the insertions
     m_interface->on_main_init(m_num_threads /* build thread */ +1);
     m_interface->updates_start();
+    int x;
+    std::cout<<"input any number to start load\n";
+    std::cin>>x;
     Timer timer;
     timer.start();
     BuildThread build_service { m_interface , static_cast<int>(m_num_threads), m_build_frequency };

@@ -419,7 +419,7 @@ if ( test x"${with_llama}" != x"no" ); then
     AC_MSG_CHECKING([whether we can compile and link against the llama library])
     AC_LINK_IFELSE([
         AC_LANG_PROGRAM([[
-            #define LL_MEMORY_ONLY 
+            #define LL_PERSISTENCE 
             #define LL_DELETIONS
             #define register /* disable the usage of register */
             @%:@include "llama.h"
@@ -586,7 +586,7 @@ if ( test x"${with_bach}" != x"" && test x"${with_bach}" != "no" ); then
     AC_SEARCH_LIBS([_ZN4bach2DB16BeginTransactionEv], [bach], [], [ AC_MSG_ERROR([cannot link the library bach]) ])
     
     AC_MSG_NOTICE([BACH support enabled])
-    AS_VAR_APPEND([CPPFLAGS], [" -DHAVE_BACH"])
+    AS_VAR_APPEND([CPPFLAGS], [" -DHAVE_BACH -lprofiler -ltcmalloc"])
 fi
 
 
