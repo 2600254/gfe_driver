@@ -124,7 +124,7 @@ GraphalyticsSequential::GraphalyticsSequential(std::shared_ptr<gfe::library::Gra
 #define TIME std::chrono::duration_cast<std::chrono::milliseconds>(chrono::steady_clock::now()-begin).count()
 std::chrono::microseconds GraphalyticsSequential::execute(
     std::chrono::time_point<std::chrono::_V2::steady_clock>  begin,bool booo){
-    std::ofstream _out("Algorithm.txt");
+    std::ofstream _out("Algorithm.txt",ios::app);
     auto interface = m_interface.get();
     constexpr uint64_t max_num_errors = 10; // if validation is enabled
 

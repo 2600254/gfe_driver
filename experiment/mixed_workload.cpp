@@ -33,10 +33,13 @@ namespace gfe::experiment {
         {
           auto now=m_aging_experiment.num_operations_sofar();
           throughput<<now-last<<" "<<std::chrono::duration_cast<std::chrono::milliseconds>(chrono::steady_clock::now()-start_time).count()<<std::endl;
+          last=now;
           this_thread::sleep_for( progress_check_interval ) ;
         }
         return true;
       });
+      std::ofstream _out("Algorithm.txt");
+      _out<<("");
       this_thread::sleep_for( progress_check_interval );  // Poor mans synchronization to ensure AgingExperiment was able to setup the master etc
       while (true) {
         if (m_aging_experiment.progress_so_far() > 0.1 || aging_result_future.wait_for(std::chrono::seconds(0)) == std::future_status::ready) { // The graph reached its final size
