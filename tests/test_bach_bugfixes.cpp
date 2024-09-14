@@ -92,7 +92,7 @@ TEST(BACH, BFSInternalImpl)
     CSR csr{/* directed ? */ false};
     BACHDriver bach{/* directed ? */ false};
 
-    uint64_t num_vertices = 1ull << 10;
+    uint64_t num_vertices = 1ull << 13;
 
     LOG("Creating a graph ...");
     auto stream = generate_edge_stream(num_vertices);
@@ -131,7 +131,7 @@ TEST(BACH, PageRankInternalImpl)
     CSR csr{/* directed ? */ false};
     BACHDriver bach{/* directed ? */ false};
 
-    uint64_t num_vertices = 1ull << 10;
+    uint64_t num_vertices = 1ull << 13;
 
     LOG("Creating a graph ...");
     auto stream = generate_edge_stream(num_vertices);

@@ -170,7 +170,7 @@ static void sequential(shared_ptr<UpdateInterface> interface, bool edge_deletion
 
 // Whether execute the tests inside #parallel() with multiple threads. Useful for GraphOne as the implementation of
 // get weight is particularly slow
-static bool parallel_check = false;
+static bool parallel_check = true;
 
 // Whether vertex deletions are supported by the interface. All libraries support them (more or less), but GraphOne
 static bool parallel_vertex_deletions = true;

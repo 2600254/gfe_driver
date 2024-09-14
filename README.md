@@ -14,7 +14,7 @@ execute the updates specified by a [graphlog file](https://github.com/whatsthecr
 the Graphalytics suite: BFS, PageRank (PR), local triangle counting (LCC), weighted shortest paths (SSSP), 
 weakly connected components (WCC) and community detection through label propagation (CDLP).  
 
-remove third-party/libcommon/src/CMakeLists.txt:33 "-Werror"
+<!--remove third-party/libcommon/src/CMakeLists.txt:33 "-Werror"-->
 
 ### Build 
 
@@ -44,6 +44,26 @@ The driver needs to be linked with the system to evaluate, which has to be built
 We do not recommend linking the driver with multiple systems at once, 
 due to the usage of global variables in some systems and other naming clashes. 
 Instead, it is safer to reconfigure and rebuild the driver each time for a single specific system.
+
+
+##### BACH
+
+Download the library from https://github.com/2600254/BACH_demo. 
+
+```
+mkdir build && cd build
+cmake ..
+make
+```
+
+Then configure the driver by pointing the path to the compiled dynamic library is located:
+
+```
+mkdir build && cd build
+../configure --enable-optimize --disable-debug --with-bach=/path/to/BACH_demo/build
+```
+
+You can run BACH's benchmark by `-l bach_ro`.
 
 
 ##### Stinger
