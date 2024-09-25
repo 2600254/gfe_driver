@@ -55,6 +55,9 @@
 #if defined(HAVE_BACH)
 #include "bach/bach_driver.hpp"
 #endif
+#if defined(HAVE_ROCKSDB)
+#include "rocksdb/rocksdb_driver.hpp"
+#endif
 #if defined(HAVE_TESEO)
 #include "teseo/teseo_driver.hpp"
 #include "teseo/teseo_real_vtx.hpp"
@@ -219,6 +222,12 @@ std::unique_ptr<Interface> generate_bach_rw(bool directed_graph){ // read-write 
 }
 #endif
 
+#if defined(HAVE_ROCKSDB)
+std::unique_ptr<Interface> generate_rocksdb(bool directed_graph){
+    return unique_ptr<Interface>( new RocksDBDriver(directed_graph));
+}
+#endif
+
 #if defined(HAVE_TESEO)
 std::unique_ptr<Interface> generate_teseo(bool directed_graph){
     return unique_ptr<Interface>{ new TeseoDriver(directed_graph) };
@@ -337,6 +346,10 @@ vector<ImplementationManifest> implementations() {
 #if defined(HAVE_BACH)
     result.emplace_back("bach_ro", "BACH, use read-only transactions for the Graphalytics kernels", &generate_bach_ro);
     result.emplace_back("bach_rw", "BACH, use read-write transactions for the Graphalytics kernels", &generate_bach_rw);
+#endif
+
+#if defined(HAVE_ROCKSDB)
+    result.emplace_back("rocksdb", "RocksDB library", &generate_rocksdb);
 #endif
 
 #if defined(HAVE_TESEO)

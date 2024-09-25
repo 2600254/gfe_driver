@@ -60,6 +60,10 @@
 #include "library/bach/bach_driver.hpp"
 #endif
 
+#if defined(HAVE_ROCKSDB)
+#include "library/rocksdb/rocksdb_driver.hpp"
+#endif
+
 #if defined(HAVE_TESEO)
 #include "library/teseo/teseo_driver.hpp"
 #endif
@@ -107,7 +111,6 @@ static void sequential(shared_ptr<UpdateInterface> interface, bool edge_deletion
 
     this_thread::sleep_for(1s);
     interface->build();
-    std::cout<<"ADD END\n";
     // check all edges have been inserted
     ASSERT_EQ(interface->num_edges(), edge_list->num_edges());
     for(uint64_t i = 1; i < edge_list->max_vertex_id(); i++){
@@ -400,6 +403,25 @@ TEST(BACH, UpdatesUndirected) {
     parallel(bach, 512);
     std::cout<<1024<<std::endl;
     parallel(bach,1024);
+
+    parallel_check = false; // global, reset to the default value
+    parallel_vertex_deletions = true; // global, reset to the default value
+}
+#endif
+
+#if defined(HAVE_ROCKSDB)
+TEST(RocksDB, UpdatesUndirected) {
+    parallel_check = true; // global, check the weights in parallel
+    parallel_vertex_deletions = true; // global, enable vertex deletions
+
+    auto rocksdb = make_shared<RocksDBDriver>(/* directed */ false);
+    sequential(rocksdb,true,true,16);
+    sequential(rocksdb);
+    
+    parallel(rocksdb, 64);
+    parallel(rocksdb, 128);
+    parallel(rocksdb, 512);
+    parallel(rocksdb,1024);
 
     parallel_check = false; // global, reset to the default value
     parallel_vertex_deletions = true; // global, reset to the default value

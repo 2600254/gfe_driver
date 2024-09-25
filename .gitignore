@@ -19,7 +19,7 @@ _Deparsed_XSubs.pm
 /Release/
 /buildlive/
 /buildllama
-/buildone
+/build*
 /.vscode/
 /test.*
 /testmem.*

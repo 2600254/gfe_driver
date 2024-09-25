@@ -104,6 +104,9 @@ endif
 ifneq (,$(findstring -DHAVE_BACH,${ALL_CPPFLAGS}))
 	sources += $(addprefix library/bach/, bach_driver.cpp)
 endif
+ifneq (,$(findstring -DHAVE_ROCKSDB,${ALL_CPPFLAGS}))
+	sources += $(addprefix library/rocksdb/, rocksdb_driver.cpp)
+endif
 ifneq (,$(findstring -DHAVE_SORTLEDTON,${ALL_CPPFLAGS}))
 	sources += $(addprefix library/sortledton/, sortledton_driver.cpp)
 endif

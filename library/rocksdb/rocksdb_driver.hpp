@@ -19,23 +19,32 @@
 
 #include <atomic>
 #include <chrono>
+#include <stdint.h>
+#include "rocksdb/db.h"
+//#include "rocksdb/utilities/transaction_db.h"
 #include "library/interface.hpp"
 
+#define uint64_t unsigned long
 namespace gfe::library {
 
 /**
- * Wrapper to evaluate the BACH library
+ * Wrapper to evaluate the RocksDB library
  */
-class BACHDriver : public virtual UpdateInterface, public virtual GraphalyticsInterface {
-    BACHDriver(const BACHDriver&) = delete;
-    BACHDriver& operator=(const BACHDriver&) = delete;
+class RocksDBDriver : public virtual UpdateInterface, public virtual GraphalyticsInterface {
+    RocksDBDriver(const RocksDBDriver&) = delete;
+    RocksDBDriver& operator=(const RocksDBDriver&) = delete;
 
 protected:
-    void* m_pImpl; // pointer to the BACH handle
+    rocksdb::DB* m_pImpl; // pointer to the RocksDB handle
+    rocksdb::Options m_options;
+    std::vector<rocksdb::ColumnFamilyHandle*> handles;
+
+    rocksdb::WriteOptions m_write_options;
+    rocksdb::ReadOptions m_read_options;
     void* m_pHashMap; // pointer to the TBB HashMap to translate the vertex identifiers into the dense IDs for BACH
     const bool m_is_directed; // whether the underlying graph is directed or undirected
-    const bool m_read_only; // whether to used read only transactions for graphalytics
     std::atomic<uint64_t> m_num_vertices {0}; // keep track of the total number of vertices
+    std::atomic<uint64_t> m_id_vertices {0}; // keep track of the max number of vertices
     std::atomic<uint64_t> m_num_edges {0}; // keep track of the total number fo edges
     std::chrono::seconds m_timeout {0}; // the budget to complete each of the algorithms in the Graphalytics suite
 
@@ -44,27 +53,27 @@ protected:
     uint64_t ext2int(uint64_t external_vertex_id) const;
 
     // Retrieve the internal vertex ID for the given internal vertex ID. If the vertex does not exist, it returns uint64_t::max()
-    uint64_t int2ext(void* transaction, uint64_t internal_vertex_id) const;
+    uint64_t int2ext(uint64_t internal_vertex_id) const;
 
     // Helper for Graphalytics: translate the logical IDs into external IDs
     template <typename T>
-    std::vector<std::pair<uint64_t, T>> translate(void* /* transaction object */ lgtxn, const T* __restrict data, uint64_t data_sz);
+    std::vector<std::pair<uint64_t, T>> translate(const T* __restrict data, uint64_t data_sz);
 
     // Helper, save the content of the vector to the given output file
     template <typename T, bool negative_scores = true>
     void save_results(const std::vector<std::pair<uint64_t, T>>& result, const char* dump2file);
 public:
     /**
-     * Create an instance of BACH
+     * Create an instance of RocksDB
      * @param is_directed: whether the underlying graph should be directed or undirected
      * @param read_only: whether to use read-only transactions for the algorithms in Graphalytics
      */
-    BACHDriver(bool is_directed, bool read_only = true);
+    RocksDBDriver(bool is_directed);
 
     /**
      * Destructor
      */
-    virtual ~BACHDriver();
+    virtual ~RocksDBDriver();
 
     /**
      * Get the number of edges contained in the graph
@@ -133,13 +142,6 @@ public:
      * Dump the content of the graph to given stream.
      */
     virtual void dump_ostream(std::ostream& out) const;
-
-    /**
-     * Retrieve the opaque objects for the internal BACH & Vertex Dictionary handles.
-     * For Debugging & Testing only
-     */
-    void* bach(); // bach::Graph*
-    void* vertex_dictionary(); // tbb::concurrent_hash_map<uint64_t, bach::vertex_t>
 
     /**
      * Perform a BFS from source_vertex_id to all the other vertices in the graph.

@@ -571,7 +571,7 @@ AC_ARG_WITH([bach], [AS_HELP_STRING([--with-bach@<:@=ARG@:>@], [
 if ( test x"${with_bach}" != x"" && test x"${with_bach}" != "no" ); then
 
     if( test x"${with_bach}" == x"yes" ); then
-        AC_MSG_ERROR(["the full path to the BACH library needs to be set, e.g. --with-bach=/path/to/bach/lib"]);
+        AC_MSG_ERROR(["the full path to the BACH library needs to be set, e.g. --with-bach=/path/to/bach/build"]);
     fi
     
     AC_MSG_NOTICE([BACH: checking whether Intel TBB is present in the machine...])
@@ -590,6 +590,54 @@ if ( test x"${with_bach}" != x"" && test x"${with_bach}" != "no" ); then
 fi
 
 
+#############################################################################
+# Support for the RocksDB framework
+# Usage:
+# default (auto) => it attempts to support rocksdb, but it does not abort in case it cannot 
+# --without-rocksdb => disable support for rocksdb
+# --with-rocksdb => attempt to support rocksdb and aborts in case of error
+# --with-rocksdb=/path/to/rocksdb_repo => add the given path into the list of include paths for the $CC, it fails in case it cannot enable llama 
+#
+AC_ARG_WITH([rocksdb], [AS_HELP_STRING([--with-rocksdb@<:@=ARG@:>@], [
+    Add support for the RocksDB library. The argument needs to be the path where the RocksDB library is located. @<:@Default: auto@:>@
+    ])], [])    
+
+if ( test x"${with_rocksdb}" != x"" && test x"${with_rocksdb}" != "no" ); then
+
+    if( test x"${with_rocksdb}" == x"yes" ); then
+        AC_MSG_ERROR(["the full path to the RocksDB library needs to be set, e.g. --with-rocksddb=/path/to/rocksdb"]);
+    fi
+    rocksdb_includedir="";
+    AC_CHECK_FILE([${with_rocksdb}/rocksdb/db.h], [rocksdb_includedir="${with_rocksdb}"])
+
+    if( test x"${rocksdb_includedir}" == x"" ); then
+        AC_CHECK_FILE([${with_rocksdb}/include/rocksdb/db.h], [rocksdb_includedir="${with_rocksdb}/include"])
+    fi
+    if( test x"${rocksdb_includedir}" == x"" ); then
+        AC_CHECK_FILE([${with_rocksdb}/../include/rocksdb/db.h], [rocksdb_includedir="${with_rocksdb}/../include"])
+    fi
+
+    if( test x"${rocksdb_includedir}" == x"" ); then
+        AC_MSG_FAILURE([Cannot find the header db.h inside ${with_rocksdb}])
+    fi
+    
+    AS_VAR_APPEND([CPPFLAGS], [" -I${rocksdb_includedir}"])
+
+    AC_MSG_NOTICE([RocksDB: checking whether Intel TBB is present in the machine...])
+    MY_INTEL_TBB()
+
+    path_rocksdb_library=$(realpath "${with_rocksdb}")
+    AC_CHECK_FILE([${path_rocksdb_library}],  
+        [ LIBS="-L${path_rocksdb_library} -Wl,-rpath=${path_rocksdb_library} ${LIBS}" ], 
+        [ AC_MSG_ERROR(["the path does not exist: ${path_rocksdb_library}"]) ]
+    )
+
+    AC_SEARCH_LIBS([_ZN7rocksdb14OptionTypeInfoC1ERKS0_], [rocksdb], [],  [AC_MSG_ERROR([cannot link the library rocksdb])])
+    
+    AC_MSG_NOTICE([rocksdb support enabled])
+    AS_VAR_APPEND([CPPFLAGS], [" -DHAVE_ROCKSDB"])
+
+fi
 #############################################################################
 # Support for the Sortledton
 # Usage:
