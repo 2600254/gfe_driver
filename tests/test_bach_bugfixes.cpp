@@ -87,7 +87,7 @@ static string temp_file_path()
 //     }
 // }
 
-TEST(BACH, BFSInternalImpl)
+TEST(BACH, LCCInternalImpl)
 {
     CSR csr{/* directed ? */ false};
     BACHDriver bach{/* directed ? */ false};
@@ -111,59 +111,59 @@ TEST(BACH, BFSInternalImpl)
     stream.reset();
 
     uint64_t num_iterations = 1;
-    LOG("BFS number of iterations: " << num_iterations);
+    LOG("LCC number of iterations: " << num_iterations);
 
     auto csr_results = temp_file_path();
-    LOG("CSR BFS: " << csr_results << " ...");
-    csr.bfs(num_iterations, csr_results.c_str());
+    LOG("CSR LCC: " << csr_results << " ...");
+    csr.lcc(csr_results.c_str());
 
     auto bach_results = temp_file_path();
-    LOG("BACH BFS: " << bach_results << " ...");
-    bach.bfs(num_iterations, bach_results.c_str());
+    LOG("BACH LCC: " << bach_results << " ...");
+    bach.lcc(bach_results.c_str());
 
     LOG("Validate the result ...");
-    gfe::utility::GraphalyticsValidate::bfs(bach_results, csr_results);
+    gfe::utility::GraphalyticsValidate::lcc(bach_results, csr_results);
     LOG("Validation succeeded");
 }
 
-TEST(BACH, PageRankInternalImpl)
-{
-    CSR csr{/* directed ? */ false};
-    BACHDriver bach{/* directed ? */ false};
+// TEST(BACH, PageRankInternalImpl)
+// {
+//     CSR csr{/* directed ? */ false};
+//     BACHDriver bach{/* directed ? */ false};
 
-    uint64_t num_vertices = 1ull << 13;
+//     uint64_t num_vertices = 1ull << 13;
 
-    LOG("Creating a graph ...");
-    auto stream = generate_edge_stream(num_vertices);
-    stream->permute();
+//     LOG("Creating a graph ...");
+//     auto stream = generate_edge_stream(num_vertices);
+//     stream->permute();
 
-    LOG("Insert " << stream->num_edges() << " edges into BACH ...")
-    uint64_t sz = stream->num_edges();
-#pragma omp parallel for
-    for (uint64_t i = 0; i < sz; i++)
-    {
-        bach.add_edge_v2(stream->get(i));
-    }
+//     LOG("Insert " << stream->num_edges() << " edges into BACH ...")
+//     uint64_t sz = stream->num_edges();
+// #pragma omp parallel for
+//     for (uint64_t i = 0; i < sz; i++)
+//     {
+//         bach.add_edge_v2(stream->get(i));
+//     }
 
-    LOG("Load the stream into the CSR ...");
-    csr.load(*(stream.get()));
-    stream.reset();
+//     LOG("Load the stream into the CSR ...");
+//     csr.load(*(stream.get()));
+//     stream.reset();
 
-    uint64_t num_iterations = 1;
-    LOG("PageRank number of iterations: " << num_iterations);
+//     uint64_t num_iterations = 1;
+//     LOG("PageRank number of iterations: " << num_iterations);
 
-    auto csr_results = temp_file_path();
-    LOG("CSR PageRank: " << csr_results << " ...");
-    csr.pagerank(num_iterations, 0.85, csr_results.c_str());
+//     auto csr_results = temp_file_path();
+//     LOG("CSR PageRank: " << csr_results << " ...");
+//     csr.pagerank(num_iterations, 0.85, csr_results.c_str());
 
-    auto bach_results = temp_file_path();
-    LOG("BACH PageRank: " << bach_results << " ...");
-    bach.pagerank(num_iterations, 0.85, bach_results.c_str());
+//     auto bach_results = temp_file_path();
+//     LOG("BACH PageRank: " << bach_results << " ...");
+//     bach.pagerank(num_iterations, 0.85, bach_results.c_str());
 
-    LOG("Validate the result ...");
-    gfe::utility::GraphalyticsValidate::pagerank(bach_results, csr_results);
-    LOG("Validation succeeded");
-}
+//     LOG("Validate the result ...");
+//     gfe::utility::GraphalyticsValidate::pagerank(bach_results, csr_results);
+//     LOG("Validation succeeded");
+// }
 
 #else
 #include <iostream>

@@ -422,13 +422,13 @@ namespace gfe::library
         }
         bach::vertex_t internal_source_id = slock1->second;
         bach::vertex_t internal_destination_id = slock2->second;
-        //LOG("inter "<<internal_source_id<<" "<<internal_destination_id);
+        // LOG("inter "<<internal_source_id<<" "<<internal_destination_id);
         auto tx = db->BeginReadOnlyTransaction();
         bach::edge_property_t lg_weight = tx.GetEdge(internal_source_id, internal_destination_id, /* label */ 0);
         double weight = numeric_limits<double>::signaling_NaN();
         if (lg_weight != std::numeric_limits<double>::max())
         { // the edge exists
-            //std::cout<<lg_weight<<" "<<std::numeric_limits<double>::max()<<std::endl;
+            // std::cout<<lg_weight<<" "<<std::numeric_limits<double>::max()<<std::endl;
             weight = lg_weight;
         }
 
@@ -456,20 +456,12 @@ namespace gfe::library
             out << "[" << internal_source_id << ", external_id: " << external_id << "]";
             { // outgoing edges
                 out << " outgoing edges: ";
-                auto answer = tx.GetEdges(internal_source_id, 0);
-                bool first = true;
-                for (auto &i : *answer)
+                auto iter = tx.GetIterator(internal_source_id, 0);
+                for (auto iter = tx.GetIterator(internal_source_id, 0);
+                     iter.IsValid();
+                     iter.Next())
                 {
-                    if (first)
-                    {
-                        first = false;
-                    }
-                    else
-                    {
-                        out << ", ";
-                    }
-                    double weight = i.second;
-                    out << "<" << i.first << " [external: " << int2ext(&tx, i.first) << "], " << weight << ">";
+                    out << "<" << iter.GetNowDst() << " [external: " << int2ext(&tx, iter.GetNowDst()) << "], " << iter.GetNowProperty() << ">, ";
                 }
             }
             out << endl;
@@ -610,10 +602,9 @@ them in parent array as negative numbers. Thus the encoding of parent is:
 
             if (distances[u] < 0)
             { // the node has not been visited yet
-                auto answer = transaction.GetEdges(u, 0);
-                for (auto &i : *answer)
+                for (auto iter = transaction.GetIterator(u, 0); iter.IsValid(); iter.Next())
                 {
-                    uint64_t dst = i.first;
+                    uint64_t dst = iter.GetNowDst();
                     COUT_DEBUG_BFS("\tincoming edge: " << dst);
 
                     if (front.get_bit(dst))
@@ -644,10 +635,9 @@ them in parent array as negative numbers. Thus the encoding of parent is:
             {
                 int64_t u = *q_iter;
                 COUT_DEBUG_BFS("explore: " << u);
-                auto answer = transaction.GetEdges(u, 0);
-                for (auto &i : *answer)
+                for (auto iter = transaction.GetIterator(u, 0); iter.IsValid(); iter.Next())
                 {
-                    uint64_t dst = i.first;
+                    uint64_t dst = iter.GetNowDst();
                     COUT_DEBUG_BFS("\toutgoing edge: " << dst);
 
                     int64_t curr_val = distances[dst];
@@ -703,7 +693,11 @@ them in parent array as negative numbers. Thus the encoding of parent is:
             else
             { // the vertex exists
                 // Retrieve the out degree for the vertex n
-                uint64_t out_degree = transaction.GetEdges(n, 0)->size();
+                uint64_t out_degree = 0;
+                for (auto iter = transaction.GetIterator(n, 0); iter.IsValid(); iter.Next())
+                {
+                    ++out_degree;
+                }
                 distances[n] = out_degree != 0 ? -out_degree : -1;
             }
         }
@@ -728,7 +722,11 @@ them in parent array as negative numbers. Thus the encoding of parent is:
         front.reset();
         int64_t edges_to_check = num_edges; // g.num_edges_directed();
 
-        int64_t scout_count = transaction.GetEdges(root, 0)->size();
+        int64_t scout_count = 0;
+        for (auto iter = transaction.GetIterator(root, 0); iter.IsValid(); iter.Next())
+        {
+            ++scout_count;
+        }
         int64_t distance = 1; // current distance
 
         while (!timer.is_timeout() && !queue.empty())
@@ -872,7 +870,11 @@ them in parent array as negative numbers. Thus the encoding of parent is:
             // compute the outdegree of the vertex
             if (!transaction.GetVertex(v, 0)->empty())
             { // check the vertex exists
-                uint64_t degree = transaction.GetEdges(v, 0)->size();
+                uint64_t degree = 0;
+                for (auto iter = transaction.GetIterator(v, 0); iter.IsValid(); iter.Next())
+                {
+                    ++degree;
+                }
                 degrees[v] = degree;
             }
             else
@@ -920,10 +922,9 @@ them in parent array as negative numbers. Thus the encoding of parent is:
                 } // the vertex does not exist
 
                 double incoming_total = 0;
-                auto answer = transaction.GetEdges(v, 0); // fixme: incoming edges for directed graphs
-                for (auto &i : *answer)
+                for (auto iter = transaction.GetIterator(v, 0); iter.IsValid(); iter.Next())
                 {
-                    uint64_t u = i.first;
+                    uint64_t u = iter.GetNowDst();
                     incoming_total += outgoing_contrib[u];
                 }
 
@@ -1003,7 +1004,6 @@ them in parent array as negative numbers. Thus the encoding of parent is:
     // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
     // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#define DEBUG_WCC
 #if defined(DEBUG_WCC)
 #define COUT_DEBUG_WCC(msg) COUT_DEBUG(msg)
 #else
@@ -1071,10 +1071,9 @@ them in parent array as negative numbers. Thus the encoding of parent is:
                 if (comp[u] == numeric_limits<uint64_t>::max())
                     continue; // the vertex does not exist
 
-                auto answer = transaction.GetEdges(u, 0);
-                for (auto &i : *answer)
+                for (auto iter = transaction.GetIterator(u, 0); iter.IsValid(); iter.Next())
                 {
-                    uint64_t v = i.first;
+                    uint64_t v = iter.GetNowDst();
                     if (v > max_vertex_id)
                     {
                         continue;
@@ -1188,10 +1187,9 @@ them in parent array as negative numbers. Thus the encoding of parent is:
 
                 // compute the histogram from both the outgoing & incoming edges. The aim is to find the number of each label
                 // is shared among the neighbours of node_id
-                auto answer = transaction.GetEdges(v, 0);
-                for (auto &i : *answer)
+                for (auto iter = transaction.GetIterator(v, 0); iter.IsValid(); iter.Next())
                 {
-                    uint64_t u = i.first;
+                    uint64_t u = iter.GetNowDst();
                     histogram[labels0[u]]++;
                 }
 
@@ -1290,7 +1288,11 @@ them in parent array as negative numbers. Thus the encoding of parent is:
             else
             {
                 { // out degree, restrict the scope
-                    uint32_t count = transaction.GetEdges(v, 0)->size();
+                    uint64_t count = 0;
+                    for (auto iter = transaction.GetIterator(v, 0); iter.IsValid(); iter.Next())
+                    {
+                        ++count;
+                    }
                     degrees_out[v] = count;
                 }
             }
@@ -1317,25 +1319,22 @@ them in parent array as negative numbers. Thus the encoding of parent is:
             unordered_set<uint64_t> neighbours;
 
             { // Fetch the list of neighbours of v
-                auto answer = transaction.GetEdges(v, 0);
-                for (auto &i : *answer)
-                    neighbours.insert(i.first);
+                for (auto iter = transaction.GetIterator(v, 0); iter.IsValid(); iter.Next())
+                    neighbours.insert(iter.GetNowDst());
             }
 
             // again, visit all neighbours of v
             // for directed graphs, edges1 contains the intersection of both the incoming and the outgoing edges
-            auto answer = transaction.GetEdges(v, 0);
-            for (auto &iu : *answer)
+            for (auto iter1 = transaction.GetIterator(v, 0); iter1.IsValid(); iter1.Next())
             {
-                uint64_t u = iu.first;
+                uint64_t u = iter1.GetNowDst();
                 COUT_DEBUG_LCC("[" << i << "/" << edges.size() << "] neighbour: " << u);
                 assert(neighbours.count(u) == 1 && "The set `neighbours' should contain all neighbours of v");
 
                 // For the Graphalytics spec v 0.9.0, only consider the outgoing edges for the neighbours u
-                auto answer2 = transaction.GetEdges(u, 0);
-                for (auto &uj : *answer2)
+                for (auto iter2 = transaction.GetIterator(u, 0); iter2.IsValid(); iter2.Next())
                 {
-                    uint64_t w = uj.first;
+                    uint64_t w = iter2.GetNowDst();
 
                     COUT_DEBUG_LCC("---> [" << j << "/" << /* degree */ (u_out_interval.second - u_out_interval.first) << "] neighbour: " << w);
                     // check whether it's also a neighbour of v
@@ -1455,11 +1454,10 @@ them in parent array as negative numbers. Thus the encoding of parent is:
                     NodeID u = frontier[i];
                     if (dist[u] >= delta * static_cast<WeightT>(curr_bin_index))
                     {
-                        auto answer = transaction.GetEdges(u, 0);
-                        for (auto &i : *answer)
+                        for (auto iter = transaction.GetIterator(u, 0); iter.IsValid(); iter.Next())
                         {
-                            uint64_t v = i.first;
-                            double w = i.second;
+                            uint64_t v = iter.GetNowDst();
+                            double w = iter.GetNowProperty();
 
                             WeightT old_dist = dist[v];
                             WeightT new_dist = dist[u] + w;
