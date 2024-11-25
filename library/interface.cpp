@@ -55,6 +55,9 @@
 #if defined(HAVE_BACH)
 #include "bach/bach_driver.hpp"
 #endif
+#if defined(HAVE_NEO4J)
+#include "neo4j/neo4j_driver.hpp"
+#endif
 #if defined(HAVE_ROCKSDB)
 #include "rocksdb/rocksdb_driver.hpp"
 #endif
@@ -222,6 +225,12 @@ std::unique_ptr<Interface> generate_bach_rw(bool directed_graph){ // read-write 
 }
 #endif
 
+#if defined(HAVE_NEO4J)
+std::unique_ptr<Interface> generate_neo4j(bool directed_graph){ // read only transactions for Graphalytics
+    return unique_ptr<Interface>( new Neo4jDriver(directed_graph));
+}
+#endif
+
 #if defined(HAVE_ROCKSDB)
 std::unique_ptr<Interface> generate_rocksdb(bool directed_graph){
     return unique_ptr<Interface>( new RocksDBDriver(directed_graph));
@@ -350,6 +359,10 @@ vector<ImplementationManifest> implementations() {
 
 #if defined(HAVE_ROCKSDB)
     result.emplace_back("rocksdb", "RocksDB library", &generate_rocksdb);
+#endif
+
+#if defined(HAVE_NEO4J)
+    result.emplace_back("neo4j", "Neo4j library", &generate_neo4j);
 #endif
 
 #if defined(HAVE_TESEO)

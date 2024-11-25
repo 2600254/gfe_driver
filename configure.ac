@@ -638,6 +638,69 @@ if ( test x"${with_rocksdb}" != x"" && test x"${with_rocksdb}" != "no" ); then
     AS_VAR_APPEND([CPPFLAGS], [" -DHAVE_ROCKSDB"])
 
 fi
+
+#############################################################################
+# Support for the Neo4j framework
+# Usage:
+#
+# --with-neo4j => attempt to support neo4j and aborts in case of error
+#
+AC_ARG_WITH([neo4j], [AS_HELP_STRING([--with-neo4j], [
+    Add support for the Neo4j library.])], 
+    [
+        if test "$withval" = "yes" || test -z "$withval"; then
+                WITH_NEO4J="yes"
+            elif test "$withval" = "no"; then
+                WITH_NEO4J="no"
+            else
+                AC_MSG_ERROR([Invalid value for --with-neo4j. Use 'yes' or 'no'.])
+            fi
+    ],
+    [WITH_NEO4J="no"])    
+
+if  test "$WITH_NEO4J" = "yes" ; then
+    
+    AC_CHECK_PROG([NEO4J_CMD], [neo4j], [neo4j], [no])
+
+    if test "$NEO4J_CMD" != "no"; then
+        AC_MSG_CHECKING([for Neo4j version])
+
+        NEO4J_VERSION=$($NEO4J_CMD --version 2>/dev/null | cut -d' ' -f2)
+
+        AC_MSG_RESULT([$NEO4J_VERSION])
+        if test "$NEO4J_VERSION" = "3.4.7"; then
+            AC_MSG_NOTICE([Neo4j version 3.4.7 found])
+        else
+            AC_MSG_WARN([Neo4j version 3.4.7 required, but found $NEO4J_VERSION])
+        fi
+    else
+        AC_MSG_ERROR([Neo4j not found])
+    fi
+
+    AC_CHECK_FILE([${srcdir}/third-party/neo4jdriver/jsoncpp/dist/jsoncpp.cpp], [], [
+
+        AC_MSG_NOTICE([jsoncpp.cpp does not exist, generating...])
+        AC_PATH_PROG([PYTHON], [python3 python], [no])
+        if test "$PYTHON" = "no";then
+            AC_MSG_ERROR([Python interpreter not found. Ensure Python is installed.])
+        else
+            (cd ${srcdir}/third-party/neo4jdriver/jsoncpp && $PYTHON amalgamate.py) || AC_MSG_ERROR([Failed to generate jsoncpp.cpp.])
+        fi
+    ])
+
+    AC_CHECK_LIB([curl], [curl_easy_init], [
+        LIBS="-lcurl ${LIBS}" 
+        AC_MSG_NOTICE([libcurl found])
+    ], [
+        AC_MSG_ERROR([libcurl not found. Install libcurl development files.])
+    ])
+    
+    AC_MSG_NOTICE([Neo4j: checking whether Intel TBB is present in the machine...])
+    MY_INTEL_TBB()
+
+    AC_MSG_NOTICE([Neo4j support enabled])
+    AS_VAR_APPEND([CPPFLAGS], [" -DHAVE_NEO4J"])
+fi
 #############################################################################
 # Support for the Sortledton
 # Usage:

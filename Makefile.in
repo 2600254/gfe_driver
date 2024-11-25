@@ -107,6 +107,11 @@ endif
 ifneq (,$(findstring -DHAVE_ROCKSDB,${ALL_CPPFLAGS}))
 	sources += $(addprefix library/rocksdb/, rocksdb_driver.cpp)
 endif
+ifneq (,$(findstring -DHAVE_NEO4J,${ALL_CPPFLAGS}))
+	sources += $(addprefix library/neo4j/, neo4j_driver.cpp)
+	sources += $(addprefix third-party/neo4jdriver/jsoncpp/dist/, jsoncpp.cpp)
+	sources += $(addprefix third-party/neo4jdriver/, api.cpp database.cpp kit.cpp)
+endif
 ifneq (,$(findstring -DHAVE_SORTLEDTON,${ALL_CPPFLAGS}))
 	sources += $(addprefix library/sortledton/, sortledton_driver.cpp)
 endif

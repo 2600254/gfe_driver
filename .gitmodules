@@ -2,3 +2,6 @@
 	path = third-party/libcommon
 	url = https://github.com/PerFuchs/libcommon
 	branch = master
+[submodule "third-party/neo4jdriver"]
+	path = third-party/neo4jdriver
+	url = https://github.com/2600254/Neo4j-cpp-driver

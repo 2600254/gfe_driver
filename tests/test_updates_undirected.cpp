@@ -64,6 +64,10 @@
 #include "library/rocksdb/rocksdb_driver.hpp"
 #endif
 
+#if defined(HAVE_NEO4J)
+#include "library/neo4j/neo4j_driver.hpp"
+#endif
+
 #if defined(HAVE_TESEO)
 #include "library/teseo/teseo_driver.hpp"
 #endif
@@ -422,6 +426,25 @@ TEST(RocksDB, UpdatesUndirected) {
     parallel(rocksdb, 128);
     parallel(rocksdb, 512);
     parallel(rocksdb,1024);
+
+    parallel_check = false; // global, reset to the default value
+    parallel_vertex_deletions = true; // global, reset to the default value
+}
+#endif
+
+#if defined(HAVE_NEO4J)
+TEST(Neo4j, UpdatesUndirected) {
+    parallel_check = true; // global, check the weights in parallel
+    parallel_vertex_deletions = true; // global, enable vertex deletions
+
+    auto neo4j = make_shared<Neo4jDriver>(/* directed */ false);
+    // sequential(neo4j,true,true,16);
+    // sequential(neo4j);
+    
+    parallel(neo4j, 64);
+    parallel(neo4j, 128);
+    parallel(neo4j, 512);
+    parallel(neo4j,1024);
 
     parallel_check = false; // global, reset to the default value
     parallel_vertex_deletions = true; // global, reset to the default value

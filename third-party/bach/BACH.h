@@ -22,8 +22,9 @@ namespace BACH
 			TIERING,
 			ELASTIC
 		}
-		MERGING_STRATEGY = MergingStrategy::TIERING;
-		size_t MEM_TABLE_MAX_SIZE = 1*1024*1024;//16*1024*1024
+		MERGING_STRATEGY = MergingStrategy::LEVELING;
+		size_t MEM_TABLE_MAX_SIZE = 256*1024;//16*1024*1024
+		size_t LEVEL_0_MAX_SIZE = 512 * 1024 * 1024;
 		size_t VERTEX_PROPERTY_MAX_SIZE = 16* 1024 * 1024;
 		vertex_t MEMORY_MERGE_NUM = 256;
 		vertex_t FILE_MERGE_NUM = 4;
@@ -34,6 +35,8 @@ namespace BACH
 		size_t MAX_FILE_READER_CACHE_SIZE = 256;
 		size_t MAX_WORKER_THREAD = 16;
 		double FALSE_POSITIVE = 0.01;
+		size_t MAX_LEVEL = 5;
+		size_t LEVEL_SIZE_RITIO = 10;
 	};
 #else
 	struct Options;
@@ -68,7 +71,8 @@ namespace bach
 	public:
 		Transaction(std::unique_ptr<BACH::Transaction> _txn);
 		~Transaction();
-		vertex_t AddVertex(label_t label, std::string_view property);
+		vertex_t AddVertex(label_t label);
+		void PutVertex(label_t label, vertex_t vertex_id, std::string_view property);
 		std::shared_ptr<std::string> GetVertex(vertex_t vertex, label_t label);
 		void DelVertex(vertex_t vertex, label_t label);
 		vertex_t GetVertexNum(label_t label);

@@ -15,7 +15,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 #include "gtest/gtest.h"
-#if defined(HAVE_BACH)
+#if defined(HAVE_NEO4J)
 
 #include <cstdlib>
 #include <iostream>
@@ -28,7 +28,7 @@
 #include "graph/edge.hpp"
 #include "graph/edge_stream.hpp"
 #include "library/baseline/csr.hpp"
-#include "library/bach/bach_driver.hpp"
+#include "library/neo4j/neo4j_driver.hpp"
 #include "utility/graphalytics_validate.hpp"
 
 // Log to stdout
@@ -71,9 +71,9 @@ static string temp_file_path()
     return string(pattern);
 }
 
-// TEST(BACH, Updates)
+// TEST(Neo4j, Updates)
 // {
-//     BACHDriver bach{false};
+//     Neo4jDriver neo4j{false};
 //     uint64_t num_vertices = 1ull << 4;
 //     LOG("Creating a graph ...");
 //     auto stream = generate_edge_stream(num_vertices);
@@ -83,29 +83,29 @@ static string temp_file_path()
 //     for (uint64_t i = 0; i < sz; i++)
 //     {
 //         LOG(stream->get(i));
-//         bach.add_edge_v2(stream->get(i));
+//         neo4j.add_edge_v2(stream->get(i));
 //     }
 // }
 
-TEST(BACH, BFSInternalImpl)
+TEST(Neo4j, BFSInternalImpl)
 {
     CSR csr{/* directed ? */ false};
-    BACHDriver bach{/* directed ? */ false};
+    Neo4jDriver neo4j{/* directed ? */ false};
 
-    uint64_t num_vertices = 1ull << 5;
+    uint64_t num_vertices = 1ull << 8;
 
     LOG("Creating a graph ...");
     auto stream = generate_edge_stream(num_vertices);
     stream->permute();
 
-    LOG("Insert " << stream->num_edges() << " edges into BACH ...")
+    LOG("Insert " << stream->num_edges() << " edges into Neo4j ...")
     uint64_t sz = stream->num_edges();
 #pragma omp parallel for
     for (uint64_t i = 0; i < sz; i++)
     {
-        bach.add_edge_v2(stream->get(i));
+        neo4j.add_edge_v2(stream->get(i));
     }
-
+    //neo4j.dump_ostream(std::cout);
     LOG("Load the stream into the CSR ...");
     csr.load(*(stream.get()));
     stream.reset();
@@ -117,32 +117,32 @@ TEST(BACH, BFSInternalImpl)
     LOG("CSR BFS: " << csr_results << " ...");
     csr.bfs(num_iterations, csr_results.c_str());
 
-    auto bach_results = temp_file_path();
-    LOG("BACH BFS: " << bach_results << " ...");
-    bach.bfs(num_iterations, bach_results.c_str());
+    auto neo4j_results = temp_file_path();
+    LOG("Neo4j BFS: " << neo4j_results << " ...");
+    neo4j.bfs(num_iterations, neo4j_results.c_str());
 
     LOG("Validate the result ...");
-    gfe::utility::GraphalyticsValidate::bfs(bach_results, csr_results);
+    gfe::utility::GraphalyticsValidate::bfs(neo4j_results, csr_results);
     LOG("Validation succeeded");
 }
 
-TEST(BACH, PageRankInternalImpl)
+TEST(Neo4j, PageRankInternalImpl)
 {
     CSR csr{/* directed ? */ false};
-    BACHDriver bach{/* directed ? */ false};
+    Neo4jDriver neo4j{/* directed ? */ false};
 
-    uint64_t num_vertices = 1ull << 13;
+    uint64_t num_vertices = 1ull << 8;
 
     LOG("Creating a graph ...");
     auto stream = generate_edge_stream(num_vertices);
     stream->permute();
 
-    LOG("Insert " << stream->num_edges() << " edges into BACH ...")
+    LOG("Insert " << stream->num_edges() << " edges into Neo4j ...")
     uint64_t sz = stream->num_edges();
 #pragma omp parallel for
     for (uint64_t i = 0; i < sz; i++)
     {
-        bach.add_edge_v2(stream->get(i));
+        neo4j.add_edge_v2(stream->get(i));
     }
 
     LOG("Load the stream into the CSR ...");
@@ -156,19 +156,19 @@ TEST(BACH, PageRankInternalImpl)
     LOG("CSR PageRank: " << csr_results << " ...");
     csr.pagerank(num_iterations, 0.85, csr_results.c_str());
 
-    auto bach_results = temp_file_path();
-    LOG("BACH PageRank: " << bach_results << " ...");
-    bach.pagerank(num_iterations, 0.85, bach_results.c_str());
+    auto neo4j_results = temp_file_path();
+    LOG("Neo4j PageRank: " << neo4j_results << " ...");
+    neo4j.pagerank(num_iterations, 0.85, neo4j_results.c_str());
 
     LOG("Validate the result ...");
-    gfe::utility::GraphalyticsValidate::pagerank(bach_results, csr_results);
+    gfe::utility::GraphalyticsValidate::pagerank(neo4j_results, csr_results);
     LOG("Validation succeeded");
 }
 
 #else
 #include <iostream>
-TEST(BACH, Disabled)
+TEST(Neo4j, Disabled)
 {
-    std::cout << "Tests disabled as the build does not contain the support for BACH.\n";
+    std::cout << "Tests disabled as the build does not contain the support for Neo4j.\n";
 }
 #endif

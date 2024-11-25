@@ -15,7 +15,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "bach_driver.hpp"
+#include "neo4j_driver.hpp"
 
 #include <atomic>
 #include <cassert>
@@ -36,14 +36,13 @@
 #include "third-party/libcuckoo/cuckoohash_map.hh"
 // #include "third-party/livegraph/livegraph.hpp"
 #include "utility/timeout_service.hpp"
-#include "third-party/bach/BACH.h"
 #include "configuration.hpp"
 using namespace common;
 using namespace libcuckoo;
 using namespace std;
 
-#define db reinterpret_cast<bach::DB *>(m_pImpl)
-using vertex_dictionary_t = tbb::concurrent_hash_map<uint64_t, bach::vertex_t>;
+#define db reinterpret_cast<neo4jDriver::Neo4jAPI *>(m_pImpl)
+using vertex_dictionary_t = tbb::concurrent_hash_map<uint64_t, uint64_t>;
 #define VertexDictionary reinterpret_cast<vertex_dictionary_t *>(m_pHashMap)
 
 /*****************************************************************************
@@ -56,10 +55,10 @@ namespace gfe
 {
     extern mutex _log_mutex [[maybe_unused]];
 }
-#define COUT_DEBUG_FORCE(msg)                                                                                                              \
-    {                                                                                                                                      \
-        std::scoped_lock<std::mutex> lock{::gfe::_log_mutex};                                                                              \
-        std::cout << "[BACHDriver::" << __FUNCTION__ << "] [Thread #" << common::concurrency::get_thread_id() << "] " << msg << std::endl; \
+#define COUT_DEBUG_FORCE(msg)                                                                                                               \
+    {                                                                                                                                       \
+        std::scoped_lock<std::mutex> lock{::gfe::_log_mutex};                                                                               \
+        std::cout << "[Neo4jDriver::" << __FUNCTION__ << "] [Thread #" << common::concurrency::get_thread_id() << "] " << msg << std::endl; \
     }
 #define DEBUG
 #if defined(DEBUG)
@@ -76,20 +75,35 @@ namespace gfe::library
      *  Init                                                                     *
      *                                                                           *
      *****************************************************************************/
-    BACHDriver::BACHDriver(bool is_directed, bool read_only) : m_pImpl(nullptr), m_pHashMap(nullptr), m_is_directed(is_directed), m_read_only(read_only)
+    Neo4jDriver::Neo4jDriver(bool is_directed) : m_pImpl(nullptr), m_is_directed(is_directed)
     {
-        auto o = std::make_shared<BACH::Options>();
-        m_pImpl = new bach::DB(o);
-        db->AddVertexLabel("v");
-        db->AddEdgeLabel("e", "v", "v");
-        db->AddEdgeLabel("er", "v", "v");
+        int status = std::system("systemctl is-active --quiet neo4j");
+        if (status != 0)
+        {
+            status = std::system("sudo systemctl start neo4j");
+            if (status == 0)
+            {
+                std::cout << "Neo4j started successfully." << std::endl;
+            }
+            else
+            {
+                std::cerr << "Failed to start Neo4j." << std::endl;
+                exit(-1);
+            }
+        }
+        neo4j = neo4jDriver::Neo4j::getNeo4j();
+        m_pImpl = new neo4jDriver::Neo4jAPI (neo4j, "127.0.0.1", "7474", "neo4j", "123456",32);
+        m_pImpl->connectDatabase();
+        m_pImpl->cypherQuery("MATCH (n:vertex) DETACH DELETE n;");
         m_pHashMap = new tbb::concurrent_hash_map<uint64_t, /* vertex_t */ uint64_t>();
     }
 
-    BACHDriver::~BACHDriver()
+    Neo4jDriver::~Neo4jDriver()
     {
-        delete db;
+        m_pImpl->closeDatabase();
+        delete m_pImpl;
         m_pImpl = nullptr;
+        neo4j->deleteNeo4j();
         delete VertexDictionary;
         m_pHashMap = nullptr;
     }
@@ -99,38 +113,27 @@ namespace gfe::library
      *  Properties                                                               *
      *                                                                           *
      *****************************************************************************/
-    bool BACHDriver::is_directed() const
+    bool Neo4jDriver::is_directed() const
     {
         return m_is_directed;
     }
 
-    uint64_t BACHDriver::num_edges() const
+    uint64_t Neo4jDriver::num_edges() const
     {
-        return m_num_edges;
+        return db->cypherQuery("MATCH (:vertex)-[r:edge]->(:vertex)RETURN count(r) AS relationshipCount;")["data"][0]["row"][0].asLargestUInt();
     }
 
-    uint64_t BACHDriver::num_vertices() const
+    uint64_t Neo4jDriver::num_vertices() const
     {
-        // LOG("----"<<m_num_vertices);
         return m_num_vertices;
     }
 
-    void BACHDriver::set_timeout(uint64_t seconds)
+    void Neo4jDriver::set_timeout(uint64_t seconds)
     {
         m_timeout = chrono::seconds{seconds};
     }
 
-    void *BACHDriver::bach()
-    {
-        return m_pImpl;
-    }
-
-    void *BACHDriver::vertex_dictionary()
-    {
-        return m_pHashMap;
-    }
-
-    uint64_t BACHDriver::ext2int(uint64_t external_vertex_id) const
+    uint64_t Neo4jDriver::ext2int(uint64_t external_vertex_id) const
     {
         vertex_dictionary_t::const_accessor accessor;
         if (VertexDictionary->find(accessor, external_vertex_id))
@@ -142,19 +145,150 @@ namespace gfe::library
             ERROR("The given vertex does not exist: " << external_vertex_id);
         }
     }
-
-    uint64_t BACHDriver::int2ext(void *opaque_transaction, uint64_t internal_vertex_id) const
+    uint64_t Neo4jDriver::getIIDbyid(uint64_t id) const
     {
-        auto transaction = reinterpret_cast<bach::Transaction *>(opaque_transaction);
-        string_view payload = *transaction->GetVertex(internal_vertex_id, 0);
-        if (payload.empty())
-        { // the vertex does not exist
+        Json::Value properties;
+        properties["id"] = id;
+        auto x =db->cypherQuery("MATCH (n:vertex) WHERE id(n)=$id  RETURN n;",properties);
+        if(x["data"].size()==0){
             return numeric_limits<uint64_t>::max();
+        }
+        return x["data"][0]["row"][0]["iID"].asUInt64();
+    }
+    uint64_t Neo4jDriver::getEIDbyid(uint64_t id) const
+    {
+        Json::Value properties;
+        properties["id"] = id;
+        auto x =db->cypherQuery("MATCH (n:vertex) WHERE id(n)=$id  RETURN n;",properties);
+        if(x["data"].size()==0){
+            return numeric_limits<uint64_t>::max();
+        }
+        return x["data"][0]["row"][0]["eID"].asUInt64();
+    }
+    uint64_t Neo4jDriver::getidbyIID(uint64_t id) const
+    {
+        Json::Value properties;
+        properties["iid"] = id;
+        auto x =db->cypherQuery("MATCH (n:vertex{eID:$iid})  RETURN n;",properties);
+        if(x["data"].size()==0){
+            return numeric_limits<uint64_t>::max();
+        }
+        return x["data"][0]["meta"][0]["id"].asUInt64();
+    }
+    uint64_t Neo4jDriver::getidbyEID(uint64_t id) const
+    {
+        Json::Value properties;
+        properties["eid"] = id;
+        auto x =db->cypherQuery("MATCH (n:vertex{eID:$eid})  RETURN n;",properties);
+        if(x["data"].size()==0){
+            return numeric_limits<uint64_t>::max();
+        }
+        return x["data"][0]["meta"][0]["id"].asUInt64();
+    }
+    uint64_t Neo4jDriver::getedgeidbyIID(uint64_t sid,uint64_t did) const
+    {
+        Json::Value property;
+        property["siid"] = sid;
+        property["diid"] = did;
+        auto x=db->cypherQuery(m_is_directed?
+        "MATCH (s:vertex{iID:$siid}) MATCH (d:vertex{iID:$diid}) MATCH (s)-[r:edge]->(d) RETURN r":
+        "MATCH (s:vertex{iID:$siid}) MATCH (d:vertex{iID:$diid}) MATCH (s)-[r:edge]-(d) RETURN r",
+        property);
+        if(x["data"].size()==0){
+            return numeric_limits<uint64_t>::max();
+        }
+        return x["data"][0]["meta"][0]["id"].asUInt64();
+    }
+    uint64_t Neo4jDriver::getedgeidbyEID(uint64_t sid,uint64_t did) const
+    {
+        Json::Value property;
+        property["seid"] = sid;
+        property["deid"] = did;
+        auto x=db->cypherQuery(m_is_directed?
+            "MATCH (s:vertex{eID:$seid}) MATCH (d:vertex{eID:$deid}) MATCH (s)-[r:edge]->(d) RETURN r":
+            "MATCH (s:vertex{eID:$seid}) MATCH (d:vertex{eID:$deid}) MATCH (s)-[r:edge]-(d) RETURN r",
+            property);
+        if(x["data"].size()==0){
+            return numeric_limits<uint64_t>::max();
+        }
+        return x["data"][0]["meta"][0]["id"].asUInt64();
+    }
+    double Neo4jDriver::getedgebyIID(uint64_t sid,uint64_t did) const
+    {
+        Json::Value property;
+        property["siid"] = sid;
+        property["diid"] = did;
+        auto x=db->cypherQuery(m_is_directed?
+            "MATCH (s:vertex{iID:$siid}) MATCH (d:vertex{iID:$diid}) MATCH (s)-[r:edge]->(d) RETURN r":
+            "MATCH (s:vertex{iID:$siid}) MATCH (d:vertex{iID:$diid}) MATCH (s)-[r:edge]-(d) RETURN r",
+            property);
+        if(x["data"].size()==0){
+            return numeric_limits<double>::signaling_NaN();
+        }
+        return x["data"][0]["row"][0]["weight"].asDouble();
+    }
+    double Neo4jDriver::getedgebyEID(uint64_t sid,uint64_t did) const
+    {
+        Json::Value property;
+        property["seid"] = sid;
+        property["deid"] = did;
+        auto x=db->cypherQuery(m_is_directed?
+        "MATCH (s:vertex{eID:$seid}) MATCH (d:vertex{eID:$deid}) MATCH (s)-[r:edge]->(d) RETURN r":
+        "MATCH (s:vertex{eID:$seid}) MATCH (d:vertex{eID:$deid}) MATCH (s)-[r:edge]-(d) RETURN r",
+        property);
+        if(x["data"].size()==0){
+            return numeric_limits<double>::signaling_NaN();
+        }
+        return x["data"][0]["row"][0]["weight"].asDouble();
+    }
+    std::shared_ptr<std::vector<std::pair<uint64_t,double>>> Neo4jDriver::getedgesbyid(uint64_t id) const
+    {
+        auto json=db->getRelationshipsOfOneNode(id,"edge");
+        auto ans=std::make_shared<std::vector<std::pair<uint64_t,double>>>();
+        if(m_is_directed)
+        {
+            for(auto i:json)
+                if(i["start"].asUInt64()==id)
+                {
+                    ans->push_back({i["end"].asUInt64(),i["weight"].asDouble()});
+                }
         }
         else
         {
-            return *(reinterpret_cast<const uint64_t *>(payload.data()));
+            for(auto i:json)
+            {
+                if(i["start"].asUInt64()==id)
+                {
+                    ans->push_back({i["end"].asUInt64(),i["weight"].asDouble()});
+                }
+                else
+                {
+                    ans->push_back({i["start"].asUInt64(),i["weight"].asDouble()});
+                }
+            }
         }
+        return ans;
+    }
+    std::shared_ptr<std::vector<std::pair<uint64_t,double>>> Neo4jDriver::getedgesbyIID(uint64_t id) const
+    {
+        return getedgesbyid(getidbyIID(id));
+    }
+    std::shared_ptr<std::vector<std::pair<uint64_t,double>>> Neo4jDriver::getedgesbyEID(uint64_t id) const
+    {
+        return getedgesbyid(getidbyEID(id));
+    }
+
+    uint64_t Neo4jDriver::int2ext(uint64_t internal_vertex_id) const
+    {
+        Json::Value properties;
+        properties["id"] = internal_vertex_id;
+        auto x =db->cypherQuery("MATCH (n:vertex {iID:$id}) RETURN n;",properties);
+        auto data = x["data"];
+        if(x.size()==0){
+            return numeric_limits<uint64_t>::max();
+        }
+        return data[0]["row"][0]["eID"].asUInt64();
+        
     }
 
     /*****************************************************************************
@@ -162,59 +296,37 @@ namespace gfe::library
      *  Updates                                                                  *
      *                                                                           *
      *****************************************************************************/
-    bool BACHDriver::add_vertex(uint64_t external_id)
+    bool Neo4jDriver::add_vertex(uint64_t external_id)
     {
         // COUT_DEBUG("vertex_id: " << external_id);
         vertex_dictionary_t::accessor accessor; // xlock
         bool inserted = VertexDictionary->insert(accessor, external_id);
         if (inserted)
         {
-            bach::vertex_t internal_id = 0;
-            auto tx = db->BeginTransaction();
-            string_view data{(char *)&external_id, sizeof(external_id)};
-            internal_id = tx.AddVertex(0);
-            tx.PutVertex(0, internal_id, data);
-            // LOG(external_id<<" "<<((uint64_t*)(data.data()))[0]);
-            // string_view res=tx.GetVertex(internal_id,0);
-            // LOG(((uint64_t*)(res.data()))[0]);
-            // }
-            // catch (lg::Transaction::RollbackExcept &e)
-            // {
-            //     COUT_DEBUG("Rollback, vertex id: " << external_id);
-            //     // retry ...
-            // }
-
+            uint64_t internal_id = m_id_vertices.fetch_add(1);
+            Json::Value properties;
+            properties["iid"] = internal_id;
+            properties["eid"] = external_id;
+            auto x=db->cypherQuery("MERGE (n:vertex {iID:$iid, eID:$eid}) RETURN n;",properties);
             accessor->second = internal_id;
             m_num_vertices++;
-            // LOG("--"<<m_num_vertices);
         }
 
         return inserted;
     }
 
-    bool BACHDriver::remove_vertex(uint64_t external_id)
+    bool Neo4jDriver::remove_vertex(uint64_t external_id)
     {
         // COUT_DEBUG("vertex_id: " << external_id);
         vertex_dictionary_t::accessor accessor; // xlock
         bool found = VertexDictionary->find(accessor, external_id);
         if (found)
         {
-            bach::vertex_t internal_id = accessor->second;
-            bool done = false;
-            do
-            {
-                // try
-                // {
-                auto tx = db->BeginTransaction();
-                tx.DelVertex(internal_id, 0);
-                done = true;
-                // }
-                // catch (lg::Transaction::RollbackExcept &e)
-                // {
-                //     // retry ...
-                // }
-            } while (!done);
-
+            auto x=getidbyEID(external_id);
+            if(x==numeric_limits<uint64_t>::max()){
+                return false;
+            }
+            db->deleteNode(x);
             VertexDictionary->erase(accessor);
         }
         m_num_vertices--;
@@ -222,13 +334,13 @@ namespace gfe::library
         return found;
     }
 
-    bool BACHDriver::has_vertex(uint64_t vertex_id) const
+    bool Neo4jDriver::has_vertex(uint64_t vertex_id) const
     {
         vertex_dictionary_t::const_accessor accessor;
         return VertexDictionary->find(accessor, vertex_id);
     }
 
-    bool BACHDriver::add_edge(gfe::graph::WeightedEdge e)
+    bool Neo4jDriver::add_edge(gfe::graph::WeightedEdge e)
     {
         // LOG("add"<<e);
         vertex_dictionary_t::const_accessor accessor1, accessor2; // shared lock on the dictionary
@@ -240,56 +352,16 @@ namespace gfe::library
         {
             return false;
         }
-        bach::vertex_t internal_source_id = accessor1->second;
-        bach::vertex_t internal_destination_id = accessor2->second;
-
-        bool done = false;
-        do
-        {
-            // try
-            // {
-            auto tx = db->BeginTransaction();
-            // insert the new edge only if it doesn't already exist
-            auto lg_weight = tx.GetEdge(internal_source_id, internal_destination_id, 0);
-            // LOG("found "<<lg_weight);
-            //   std::string_view src=tx.GetVertex(internal_source_id,0);
-            //   uint64_t srcid=((uint64_t*)src.data())[0];
-            //   std::string_view dst=tx.GetVertex(internal_destination_id,0);
-            //   uint64_t dstid=((uint64_t*)dst.data())[0];
-            //  LOG(lg_weight<<" "<<internal_source_id<<" "<<internal_destination_id<<" "<<srcid<<" "<<dstid);
-            if ((lg_weight) != std::numeric_limits<double>::max())
-            { // the edge already exists
-                // LOG("1111111");
-                return false;
-            }
-            // LOG("e.m_weight:"<<e.m_weight);
-
-            tx.PutEdge(internal_source_id, internal_destination_id, 0, e.m_weight);
-            // LOG("edge_added "<<e.m_weight);
-            if (!m_is_directed)
-            { // undirected graph
-                // We follow the same convention given by G. Feng, author of the Livegraph paper,
-                // for his experiments in the LDBC SNB Person knows Person: undirected edges
-                // are added twice as a -> b and b -> a
-                // LOG("reverse "<<e.m_weight);
-                tx.PutEdge(internal_destination_id, internal_source_id, 0, e.m_weight);
-            }
-            m_num_edges++;
-            // LOG("--e "<<m_num_edges);
-            done = true;
-            // LOG(internal_source_id<<" "<<internal_destination_id<<" "<<done<<"--"<<m_num_edges);
-            //  }
-            //  catch (lg::Transaction::RollbackExcept &exc)
-            //  {
-            //      COUT_DEBUG("Rollback, edge: " << e);
-            //      // retry ...
-            //  }
-        } while (!done);
-
+        Json::Value property;
+        property["seid"] = e.source();
+        property["deid"] = e.destination();
+        property["w"] = e.weight();
+        db->cypherQuery("MATCH (s:vertex{eID:$seid}) MATCH (d:vertex{eID:$deid}) MERGE (s)-[r:edge{weight:$w}]->(d) RETURN r",property);
+        // LOG("--e "<<m_num_edges);
         return true;
     }
 
-    bool BACHDriver::add_edge_v2(gfe::graph::WeightedEdge edge)
+    bool Neo4jDriver::add_edge_v2(gfe::graph::WeightedEdge edge)
     {
         uint64_t internal_source_id = numeric_limits<uint64_t>::max();
         uint64_t internal_destination_id = 0;
@@ -337,30 +409,32 @@ namespace gfe::library
         {
             // try
             // {
-            auto tx = db->BeginTransaction();
-            // create the vertices in BACH
+            // create the vertices in Neo4j
             if (insert_source)
             {
-                string_view data{(char *)&edge.m_source, sizeof(edge.m_source)};
-                internal_source_id = tx.AddVertex(0);
-                tx.PutVertex(0, internal_source_id, data);
+                uint64_t internal_id = m_id_vertices.fetch_add(1);
+                Json::Value properties;
+                properties["iid"] = internal_id;
+                properties["eid"] = edge.source();
+                auto x=db->cypherQuery("MERGE (n:vertex {iID:$iid, eID:$eid}) RETURN n;",properties);
+                internal_source_id = internal_id;
+                m_num_vertices++;
             }
             if (insert_destination)
             {
-                string_view data{(char *)&edge.m_destination, sizeof(edge.m_destination)};
-                internal_destination_id = tx.AddVertex(0);
-                tx.PutVertex(0, internal_destination_id, data);
+                uint64_t internal_id = m_id_vertices.fetch_add(1);
+                Json::Value properties;
+                properties["iid"] = internal_id;
+                properties["eid"] = edge.destination();
+                auto x=db->cypherQuery("MERGE (n:vertex {iID:$iid, eID:$eid}) RETURN n;",properties);
+                internal_destination_id = internal_id;
+                m_num_vertices++;
             }
-
-            // insert the edge
-            tx.PutEdge(internal_source_id, internal_destination_id, 0, edge.m_weight);
-
-            // a) In directed graphs, we register the incoming edges with label 1
-            // b) In undirected graphs, we follow the same convention given by G. Feng, author
-            // of the livegraph paper, for his experiments in the LDBC SNB Person knows Person:
-            // undirected edges are added twice as a -> b and b -> a
-            bach::label_t label = m_is_directed ? 1 : 0;
-            tx.PutEdge(internal_destination_id, internal_source_id, /* label */ label, edge.m_weight);
+            Json::Value property;
+            property["seid"] = edge.source();
+            property["deid"] = edge.destination();
+            property["w"] = edge.weight();
+            db->cypherQuery("MATCH (s:vertex{eID:$seid}) MATCH (d:vertex{eID:$deid}) MERGE (s)-[r:edge{weight:$w}]->(d) RETURN r",property);
             m_num_edges++;
 
             done = true;
@@ -387,54 +461,20 @@ namespace gfe::library
         return true;
     }
 
-    bool BACHDriver::remove_edge(gfe::graph::Edge e)
+    bool Neo4jDriver::remove_edge(gfe::graph::Edge e)
     {
-        vertex_dictionary_t::const_accessor slock1, slock2;
-        if (!VertexDictionary->find(slock1, e.source()))
-        {
+        auto x=getedgeidbyEID(e.source(),e.destination());
+        if(x==numeric_limits<uint64_t>::max()){
+            std::cout<<e.source()<<" "<<e.destination()<<std::endl;
             return false;
         }
-        if (!VertexDictionary->find(slock2, e.destination()))
-        {
-            return false;
-        }
-        bach::vertex_t internal_source_id = slock1->second;
-        bach::vertex_t internal_destination_id = slock2->second;
-        auto tx = db->BeginTransaction();
-        tx.DelEdge(internal_source_id, internal_destination_id, /* label */ 0);
-        if (!m_is_directed)
-        { // undirected graph
-            tx.DelEdge(internal_destination_id, internal_source_id, /* label */ 0);
-        }
-        m_num_edges--;
+        db->deleteRelationship(x);
         return true;
     }
 
-    double BACHDriver::get_weight(uint64_t source, uint64_t destination) const
+    double Neo4jDriver::get_weight(uint64_t source, uint64_t destination) const
     {
-        // check whether the referred vertices exist
-        vertex_dictionary_t::const_accessor slock1, slock2;
-        if (!VertexDictionary->find(slock1, source))
-        {
-            return numeric_limits<double>::signaling_NaN();
-        }
-        if (!VertexDictionary->find(slock2, destination))
-        {
-            return numeric_limits<double>::signaling_NaN();
-        }
-        bach::vertex_t internal_source_id = slock1->second;
-        bach::vertex_t internal_destination_id = slock2->second;
-        //LOG("inter "<<internal_source_id<<" "<<internal_destination_id);
-        auto tx = db->BeginReadOnlyTransaction();
-        bach::edge_property_t lg_weight = tx.GetEdge(internal_source_id, internal_destination_id, /* label */ 0);
-        double weight = numeric_limits<double>::signaling_NaN();
-        if (lg_weight != std::numeric_limits<double>::max())
-        { // the edge exists
-            //std::cout<<lg_weight<<" "<<std::numeric_limits<double>::max()<<std::endl;
-            weight = lg_weight;
-        }
-
-        return weight;
+        return getedgebyEID(source,destination);
     }
 
     /*****************************************************************************
@@ -442,26 +482,29 @@ namespace gfe::library
      *  Dump                                                                     *
      *                                                                           *
      *****************************************************************************/
-    void BACHDriver::dump_ostream(std::ostream &out) const
+    void Neo4jDriver::dump_ostream(std::ostream &out) const
     {
-        out << "[BACH] num vertices: " << m_num_vertices << ", num edges: " << m_num_edges << ", "
-                                                                                              "directed graph: "
-            << boolalpha << is_directed() << ", read only txn for graphalytics: " << m_read_only << endl;
-        auto tx = db->BeginReadOnlyTransaction();
-        const uint64_t max_vertex_id = tx.GetVertexNum(0);
+        out << "[Neo4j] num vertices: " << m_num_vertices << ", num edges: " << num_edges() << ", "
+                                                                                               "directed graph: "
+            << boolalpha << is_directed()  << endl;
+        const uint64_t max_vertex_id = m_num_vertices;
         for (uint64_t internal_source_id = 0; internal_source_id < max_vertex_id; internal_source_id++)
         {
-            auto lg_external_id = tx.GetVertex(internal_source_id, 0);
-            if (lg_external_id->size() == 0)
-                continue; // the vertex has been deleted
-            uint64_t external_id = *((uint64_t *)lg_external_id->data());
+            Json::Value properties;
+            properties["id"] = internal_source_id;
+            auto x =db->cypherQuery("MATCH (n:vertex {iID:$id}) RETURN n;",properties);
+            auto data = x["data"];
+            if(x.size()==0){
+                continue;
+            }
+            uint64_t external_id = data[0]["row"][0]["eID"].asUInt64();
             out << "[" << internal_source_id << ", external_id: " << external_id << "]";
             { // outgoing edges
                 out << " outgoing edges: ";
-                auto answer = tx.GetEdges(internal_source_id, 0);
+                auto answer = db->getRelationshipsOfOneNode(x["data"][0]["meta"][0]["id"].asLargestUInt(),"edge");
                 bool first = true;
-                for (auto &i : *answer)
-                {
+                for (auto &i : answer)
+                if(i["_start"].asLargestUInt()==x["data"][0]["meta"][0]["id"].asLargestUInt()){
                     if (first)
                     {
                         first = false;
@@ -470,8 +513,8 @@ namespace gfe::library
                     {
                         out << ", ";
                     }
-                    double weight = i.second;
-                    out << "<" << i.first << " [external: " << int2ext(&tx, i.first) << "], " << weight << ">";
+                    double weight = i["weight"].asDouble();
+                    out << "<" << i["_end"].asLargestUInt() << " [external: " << int2ext(i["_end"].asLargestUInt()) << "], " << weight << ">";
                 }
             }
             out << endl;
@@ -485,14 +528,14 @@ namespace gfe::library
      *****************************************************************************/
 
     template <typename T>
-    vector<pair<uint64_t, T>> BACHDriver::translate(void * /* transaction object */ transaction, const T *__restrict data, uint64_t data_sz)
+    vector<pair<uint64_t, T>> Neo4jDriver::translate(const T *__restrict data, uint64_t data_sz)
     {
         assert(transaction != nullptr && "Transaction object not specified");
         vector<pair<uint64_t, T>> output(data_sz);
 
         for (uint64_t logical_id = 0; logical_id < data_sz; logical_id++)
         {
-            uint64_t external_id = int2ext(transaction, logical_id);
+            uint64_t external_id = int2ext(logical_id);
             if (external_id == numeric_limits<uint64_t>::max())
             {                                                                                              // the vertex does not exist
                 output[logical_id] = make_pair(numeric_limits<uint64_t>::max(), numeric_limits<T>::max()); // special marker
@@ -507,7 +550,7 @@ namespace gfe::library
     }
 
     template <typename T, bool negative_scores>
-    void BACHDriver::save_results(const vector<pair<uint64_t, T>> &result, const char *dump2file)
+    void Neo4jDriver::save_results(const vector<pair<uint64_t, T>> &result, const char *dump2file)
     {
         assert(dump2file != nullptr);
         COUT_DEBUG("save the results to: " << dump2file);
@@ -598,12 +641,12 @@ them in parent array as negative numbers. Thus the encoding of parent is:
 #define COUT_DEBUG_BFS(msg)
 #endif
 
-    static int64_t do_bfs_BUStep(bach::Transaction &transaction, uint64_t max_vertex_id, int64_t *distances, int64_t distance, gapbs::Bitmap &front, gapbs::Bitmap &next)
+    static int64_t do_bfs_BUStep(Neo4jDriver* driver, uint64_t max_vertex_id, int64_t *distances, int64_t distance, gapbs::Bitmap &front, gapbs::Bitmap &next)
     {
         int64_t awake_count = 0;
         next.reset();
 
-#pragma omp parallel for schedule(dynamic, 1024) reduction(+ : awake_count)
+//#pragma omp parallel for schedule(dynamic, 1024) reduction(+ : awake_count)
         for (uint64_t u = 0; u < max_vertex_id; u++)
         {
             if (distances[u] == numeric_limits<int64_t>::max())
@@ -612,7 +655,7 @@ them in parent array as negative numbers. Thus the encoding of parent is:
 
             if (distances[u] < 0)
             { // the node has not been visited yet
-                auto answer = transaction.GetEdges(u, 0);
+                auto answer = driver->getedgesbyIID(u);
                 for (auto &i : *answer)
                 {
                     uint64_t dst = i.first;
@@ -633,7 +676,7 @@ them in parent array as negative numbers. Thus the encoding of parent is:
         return awake_count;
     }
 
-    static int64_t do_bfs_TDStep(bach::Transaction &transaction, uint64_t max_vertex_id, int64_t *distances, int64_t distance, gapbs::SlidingQueue<int64_t> &queue)
+    static int64_t do_bfs_TDStep(Neo4jDriver* driver, uint64_t max_vertex_id, int64_t *distances, int64_t distance, gapbs::SlidingQueue<int64_t> &queue)
     {
         int64_t scout_count = 0;
 
@@ -646,7 +689,7 @@ them in parent array as negative numbers. Thus the encoding of parent is:
             {
                 int64_t u = *q_iter;
                 COUT_DEBUG_BFS("explore: " << u);
-                auto answer = transaction.GetEdges(u, 0);
+                auto answer =  driver->getedgesbyIID(u);
                 for (auto &i : *answer)
                 {
                     uint64_t dst = i.first;
@@ -668,7 +711,7 @@ them in parent array as negative numbers. Thus the encoding of parent is:
         return scout_count;
     }
 
-    static void do_bfs_QueueToBitmap(bach::Transaction &transaction, uint64_t max_vertex_id, const gapbs::SlidingQueue<int64_t> &queue, gapbs::Bitmap &bm)
+    static void do_bfs_QueueToBitmap(Neo4jDriver* driver, uint64_t max_vertex_id, const gapbs::SlidingQueue<int64_t> &queue, gapbs::Bitmap &bm)
     {
 #pragma omp parallel for
         for (auto q_iter = queue.begin(); q_iter < queue.end(); q_iter++)
@@ -678,7 +721,7 @@ them in parent array as negative numbers. Thus the encoding of parent is:
         }
     }
 
-    static void do_bfs_BitmapToQueue(bach::Transaction &transaction, uint64_t max_vertex_id, const gapbs::Bitmap &bm, gapbs::SlidingQueue<int64_t> &queue)
+    static void do_bfs_BitmapToQueue(Neo4jDriver* driver, uint64_t max_vertex_id, const gapbs::Bitmap &bm, gapbs::SlidingQueue<int64_t> &queue)
     {
 #pragma omp parallel
         {
@@ -692,20 +735,20 @@ them in parent array as negative numbers. Thus the encoding of parent is:
         queue.slide_window();
     }
 
-    static unique_ptr<int64_t[]> do_bfs_init_distances(bach::Transaction &transaction, uint64_t max_vertex_id)
+    static unique_ptr<int64_t[]> do_bfs_init_distances(Neo4jDriver* driver, uint64_t max_vertex_id)
     {
         unique_ptr<int64_t[]> distances{new int64_t[max_vertex_id]};
-#pragma omp parallel for
+//#pragma omp parallel for
         for (uint64_t n = 0; n < max_vertex_id; n++)
         {
-            if (transaction.GetVertex(n, 0)->empty())
+            if (driver->getidbyIID(n)!=numeric_limits<uint64_t>::max())
             { // the vertex does not exist
                 distances[n] = numeric_limits<int64_t>::max();
             }
             else
             { // the vertex exists
                 // Retrieve the out degree for the vertex n
-                uint64_t out_degree = transaction.GetEdges(n, 0)->size();
+                uint64_t out_degree = driver->getedgesbyIID(n)->size();
                 distances[n] = out_degree != 0 ? -out_degree : -1;
             }
         }
@@ -713,11 +756,11 @@ them in parent array as negative numbers. Thus the encoding of parent is:
         return distances;
     }
 
-    static unique_ptr<int64_t[]> do_bfs(bach::Transaction &transaction, uint64_t num_vertices, uint64_t num_edges, uint64_t max_vertex_id, uint64_t root, utility::TimeoutService &timer, int alpha = 15, int beta = 18)
+    static unique_ptr<int64_t[]> do_bfs(Neo4jDriver* driver, uint64_t num_vertices, uint64_t num_edges, uint64_t max_vertex_id, uint64_t root, utility::TimeoutService &timer, int alpha = 15, int beta = 18)
     {
         // The implementation from GAP BS reports the parent (which indeed it should make more sense), while the one required by
         // Graphalytics only returns the distance
-        unique_ptr<int64_t[]> ptr_distances = do_bfs_init_distances(transaction, max_vertex_id);
+        unique_ptr<int64_t[]> ptr_distances = do_bfs_init_distances(driver, max_vertex_id);
         int64_t *__restrict distances = ptr_distances.get();
         distances[root] = 0;
 
@@ -730,7 +773,7 @@ them in parent array as negative numbers. Thus the encoding of parent is:
         front.reset();
         int64_t edges_to_check = num_edges; // g.num_edges_directed();
 
-        int64_t scout_count = transaction.GetEdges(root, 0)->size();
+        int64_t scout_count = driver->getedgesbyIID(root)->size();
         int64_t distance = 1; // current distance
 
         while (!timer.is_timeout() && !queue.empty())
@@ -739,23 +782,23 @@ them in parent array as negative numbers. Thus the encoding of parent is:
             if (scout_count > edges_to_check / alpha)
             {
                 int64_t awake_count, old_awake_count;
-                do_bfs_QueueToBitmap(transaction, max_vertex_id, queue, front);
+                do_bfs_QueueToBitmap(driver, max_vertex_id, queue, front);
                 awake_count = queue.size();
                 queue.slide_window();
                 do
                 {
                     old_awake_count = awake_count;
-                    awake_count = do_bfs_BUStep(transaction, max_vertex_id, distances, distance, front, curr);
+                    awake_count = do_bfs_BUStep(driver, max_vertex_id, distances, distance, front, curr);
                     front.swap(curr);
                     distance++;
                 } while ((awake_count >= old_awake_count) || (awake_count > (int64_t)num_vertices / beta));
-                do_bfs_BitmapToQueue(transaction, max_vertex_id, front, queue);
+                do_bfs_BitmapToQueue(driver, max_vertex_id, front, queue);
                 scout_count = 1;
             }
             else
             {
                 edges_to_check -= scout_count;
-                scout_count = do_bfs_TDStep(transaction, max_vertex_id, distances, distance, queue);
+                scout_count = do_bfs_TDStep(driver, max_vertex_id, distances, distance, queue);
                 queue.slide_window();
                 distance++;
             }
@@ -764,7 +807,7 @@ them in parent array as negative numbers. Thus the encoding of parent is:
         return ptr_distances;
     }
 
-    void BACHDriver::bfs(uint64_t external_source_id, const char *dump2file)
+    void Neo4jDriver::bfs(uint64_t external_source_id, const char *dump2file)
     {
         if (m_is_directed)
         {
@@ -775,15 +818,14 @@ them in parent array as negative numbers. Thus the encoding of parent is:
         utility::TimeoutService timeout{m_timeout};
         Timer timer;
         timer.start();
-        bach::Transaction transaction = m_read_only ? db->BeginReadOnlyTransaction() : db->BeginTransaction();
-        uint64_t max_vertex_id = transaction.GetVertexNum(0);
+        uint64_t max_vertex_id = m_num_vertices;
         uint64_t num_vertices = m_num_vertices;
         uint64_t num_edges = m_num_edges;
         uint64_t root = ext2int(external_source_id);
         COUT_DEBUG_BFS("root: " << root << " [external vertex: " << external_source_id << "]");
 
         // Run the BFS algorithm
-        unique_ptr<int64_t[]> ptr_result = do_bfs(transaction, num_vertices, num_edges, max_vertex_id, root, timeout);
+        unique_ptr<int64_t[]> ptr_result = do_bfs(this, num_vertices, num_edges, max_vertex_id, root, timeout);
         if (timeout.is_timeout())
         {
             // not sure if strictly necessary
@@ -791,7 +833,7 @@ them in parent array as negative numbers. Thus the encoding of parent is:
         }
 
         // translate the logical vertex IDs into the external vertex IDs
-        auto external_ids = translate(&transaction, ptr_result.get(), max_vertex_id);
+        auto external_ids = translate(ptr_result.get(), max_vertex_id);
         // not sure if strictly necessary
         if (timeout.is_timeout())
         {
@@ -856,7 +898,7 @@ them in parent array as negative numbers. Thus the encoding of parent is:
     updates in the pull direction to remove the need for atomics.
     */
 
-    static unique_ptr<double[]> do_pagerank(bach::Transaction &transaction, uint64_t num_vertices, uint64_t max_vertex_id, uint64_t num_iterations, double damping_factor, utility::TimeoutService &timer)
+    static unique_ptr<double[]> do_pagerank(Neo4jDriver* driver, uint64_t num_vertices, uint64_t max_vertex_id, uint64_t num_iterations, double damping_factor, utility::TimeoutService &timer)
     {
         const double init_score = 1.0 / num_vertices;
         const double base_score = (1.0 - damping_factor) / num_vertices;
@@ -872,9 +914,9 @@ them in parent array as negative numbers. Thus the encoding of parent is:
             scores[v] = init_score;
 
             // compute the outdegree of the vertex
-            if (!transaction.GetVertex(v, 0)->empty())
+            if (driver->getidbyEID(v)!=numeric_limits<uint64_t>::max())
             { // check the vertex exists
-                uint64_t degree = transaction.GetEdges(v, 0)->size();
+                uint64_t degree = driver->getedgesbyIID(v)->size();
                 degrees[v] = degree;
             }
             else
@@ -922,7 +964,7 @@ them in parent array as negative numbers. Thus the encoding of parent is:
                 } // the vertex does not exist
 
                 double incoming_total = 0;
-                auto answer = transaction.GetEdges(v, 0); // fixme: incoming edges for directed graphs
+                auto answer = driver->getedgesbyIID(v); // fixme: incoming edges for directed graphs
                 for (auto &i : *answer)
                 {
                     uint64_t u = i.first;
@@ -936,7 +978,7 @@ them in parent array as negative numbers. Thus the encoding of parent is:
         return ptr_scores;
     }
 
-    void BACHDriver::pagerank(uint64_t num_iterations, double damping_factor, const char *dump2file)
+    void Neo4jDriver::pagerank(uint64_t num_iterations, double damping_factor, const char *dump2file)
     {
         if (m_is_directed)
         {
@@ -947,20 +989,19 @@ them in parent array as negative numbers. Thus the encoding of parent is:
         utility::TimeoutService timeout{m_timeout};
         Timer timer;
         timer.start();
-        bach::Transaction transaction = m_read_only ? db->BeginReadOnlyTransaction() : db->BeginTransaction();
         uint64_t num_vertices = m_num_vertices;
-        uint64_t max_vertex_id = transaction.GetVertexNum(0);
+        uint64_t max_vertex_id = m_num_vertices;
 
         // Run the PageRank algorithm
-        unique_ptr<double[]> ptr_result = do_pagerank(transaction, num_vertices, max_vertex_id, num_iterations, damping_factor, timeout);
+        unique_ptr<double[]> ptr_result = do_pagerank(this, num_vertices, max_vertex_id, num_iterations, damping_factor, timeout);
         if (timeout.is_timeout())
         {
             RAISE_EXCEPTION(TimeoutError, "Timeout occurred after " << timer);
         }
 
         // Retrieve the external node ids
-        auto external_ids = translate(&transaction, ptr_result.get(), max_vertex_id);
-        // read-only transaction, abort == commit
+        auto external_ids = translate(ptr_result.get(), max_vertex_id);
+        // read-only driver, abort == commit
         if (timeout.is_timeout())
         {
             RAISE_EXCEPTION(TimeoutError, "Timeout occurred after " << timer);
@@ -1039,7 +1080,7 @@ them in parent array as negative numbers. Thus the encoding of parent is:
     // The hooking condition (comp_u < comp_v) may not coincide with the edge's
     // direction, so we use a min-max swap such that lower component IDs propagate
     // independent of the edge's direction.
-    static unique_ptr<uint64_t[]> do_wcc(bach::Transaction &transaction, uint64_t max_vertex_id, utility::TimeoutService &timer)
+    static unique_ptr<uint64_t[]> do_wcc(Neo4jDriver* driver, uint64_t max_vertex_id, utility::TimeoutService &timer)
     {
         // init
         COUT_DEBUG_WCC("max_vertex_id: " << max_vertex_id);
@@ -1049,7 +1090,7 @@ them in parent array as negative numbers. Thus the encoding of parent is:
 #pragma omp parallel for
         for (uint64_t n = 0; n < max_vertex_id; n++)
         {
-            if (transaction.GetVertex(n, 0)->empty())
+            if (driver->getidbyIID(n)!=numeric_limits<uint64_t>::max())
             { // the vertex does not exist
                 COUT_DEBUG_WCC("Vertex #" << n << " does not exist");
                 comp[n] = numeric_limits<uint64_t>::max();
@@ -1073,7 +1114,7 @@ them in parent array as negative numbers. Thus the encoding of parent is:
                 if (comp[u] == numeric_limits<uint64_t>::max())
                     continue; // the vertex does not exist
 
-                auto answer = transaction.GetEdges(u, 0);
+                auto answer =  driver->getedgesbyIID(u);
                 for (auto &i : *answer)
                 {
                     uint64_t v = i.first;
@@ -1117,24 +1158,23 @@ them in parent array as negative numbers. Thus the encoding of parent is:
         return ptr_components;
     }
 
-    void BACHDriver::wcc(const char *dump2file)
+    void Neo4jDriver::wcc(const char *dump2file)
     {
         utility::TimeoutService timeout{m_timeout};
         Timer timer;
         timer.start();
-        auto transaction = m_read_only ? db->BeginReadOnlyTransaction() : db->BeginTransaction();
-        uint64_t max_vertex_id = transaction.GetVertexNum(0);
+        uint64_t max_vertex_id = m_num_vertices;
 
         // run wcc
-        unique_ptr<uint64_t[]> ptr_components = do_wcc(transaction, max_vertex_id, timeout);
+        unique_ptr<uint64_t[]> ptr_components = do_wcc(this, max_vertex_id, timeout);
         if (timeout.is_timeout())
         {
             RAISE_EXCEPTION(TimeoutError, "Timeout occurred after " << timer);
         }
 
         // translate the vertex IDs
-        auto external_ids = translate(&transaction, ptr_components.get(), max_vertex_id);
-        // read-only transaction, abort == commit
+        auto external_ids = translate(ptr_components.get(), max_vertex_id);
+        // read-only driver, abort == commit
         if (timeout.is_timeout())
         {
             RAISE_EXCEPTION(TimeoutError, "Timeout occurred after " << timer);
@@ -1151,7 +1191,7 @@ them in parent array as negative numbers. Thus the encoding of parent is:
      *                                                                           *
      *****************************************************************************/
     // same impl~ as the one done for llama
-    static unique_ptr<uint64_t[]> do_cdlp(bach::Transaction &transaction, uint64_t max_vertex_id, bool is_graph_directed, uint64_t max_iterations, utility::TimeoutService &timer)
+    static unique_ptr<uint64_t[]> do_cdlp(Neo4jDriver* driver, uint64_t max_vertex_id, bool is_graph_directed, uint64_t max_iterations, utility::TimeoutService &timer)
     {
         unique_ptr<uint64_t[]> ptr_labels0{new uint64_t[max_vertex_id]};
         unique_ptr<uint64_t[]> ptr_labels1{new uint64_t[max_vertex_id]};
@@ -1162,14 +1202,10 @@ them in parent array as negative numbers. Thus the encoding of parent is:
 #pragma omp parallel for
         for (uint64_t v = 0; v < max_vertex_id; v++)
         {
-            string_view payload = *transaction.GetVertex(v, 0);
-            if (payload.empty())
-            { // the vertex does not exist
-                labels0[v] = labels1[v] = numeric_limits<uint64_t>::max();
-            }
-            else
+            labels0[v] = driver->getidbyEID(v);
+            if(labels0[v]==numeric_limits<uint64_t>::max())
             {
-                labels0[v] = *reinterpret_cast<const uint64_t *>(payload.data());
+                labels1[v]=numeric_limits<uint64_t>::max();
             }
         }
 
@@ -1190,7 +1226,7 @@ them in parent array as negative numbers. Thus the encoding of parent is:
 
                 // compute the histogram from both the outgoing & incoming edges. The aim is to find the number of each label
                 // is shared among the neighbours of node_id
-                auto answer = transaction.GetEdges(v, 0);
+                auto answer = driver->getedgesbyIID(v);
                 for (auto &i : *answer)
                 {
                     uint64_t u = i.first;
@@ -1227,7 +1263,7 @@ them in parent array as negative numbers. Thus the encoding of parent is:
         }
     }
 
-    void BACHDriver::cdlp(uint64_t max_iterations, const char *dump2file)
+    void Neo4jDriver::cdlp(uint64_t max_iterations, const char *dump2file)
     {
         if (m_is_directed)
         {
@@ -1237,19 +1273,18 @@ them in parent array as negative numbers. Thus the encoding of parent is:
         utility::TimeoutService timeout{m_timeout};
         Timer timer;
         timer.start();
-        auto transaction = m_read_only ? db->BeginReadOnlyTransaction() : db->BeginTransaction();
-        uint64_t max_vertex_id = transaction.GetVertexNum(0);
+        uint64_t max_vertex_id = m_num_vertices;
 
         // Run the CDLP algorithm
-        unique_ptr<uint64_t[]> labels = do_cdlp(transaction, max_vertex_id, is_directed(), max_iterations, timeout);
+        unique_ptr<uint64_t[]> labels = do_cdlp(this, max_vertex_id, is_directed(), max_iterations, timeout);
         if (timeout.is_timeout())
         {
             RAISE_EXCEPTION(TimeoutError, "Timeout occurred after " << timer);
         }
 
         // Translate the vertex IDs
-        auto external_ids = translate(&transaction, labels.get(), max_vertex_id);
-        // read-only transaction, abort == commit
+        auto external_ids = translate(labels.get(), max_vertex_id);
+        // read-only driver, abort == commit
         if (timeout.is_timeout())
         {
             RAISE_EXCEPTION(TimeoutError, "Timeout occurred after " << timer);
@@ -1273,7 +1308,7 @@ them in parent array as negative numbers. Thus the encoding of parent is:
 #endif
 
     // loosely based on the impl~ made for GraphOne
-    static unique_ptr<double[]> do_lcc_undirected(bach::Transaction &transaction, uint64_t max_vertex_id, utility::TimeoutService &timer)
+    static unique_ptr<double[]> do_lcc_undirected(Neo4jDriver* driver, uint64_t max_vertex_id, utility::TimeoutService &timer)
     {
         unique_ptr<double[]> ptr_lcc{new double[max_vertex_id]};
         double *lcc = ptr_lcc.get();
@@ -1284,15 +1319,14 @@ them in parent array as negative numbers. Thus the encoding of parent is:
 #pragma omp parallel for schedule(dynamic, 4096)
         for (uint64_t v = 0; v < max_vertex_id; v++)
         {
-            bool vertex_exists = !transaction.GetVertex(v, 0)->empty();
-            if (!vertex_exists)
+            if (driver->getidbyEID(v)==numeric_limits<uint64_t>::max())
             {
                 lcc[v] = numeric_limits<double>::signaling_NaN();
             }
             else
             {
                 { // out degree, restrict the scope
-                    uint32_t count = transaction.GetEdges(v, 0)->size();
+                    uint32_t count = driver->getedgesbyIID(v)->size();
                     degrees_out[v] = count;
                 }
             }
@@ -1319,14 +1353,14 @@ them in parent array as negative numbers. Thus the encoding of parent is:
             unordered_set<uint64_t> neighbours;
 
             { // Fetch the list of neighbours of v
-                auto answer = transaction.GetEdges(v, 0);
+                auto answer = driver->getedgesbyIID(v);
                 for (auto &i : *answer)
                     neighbours.insert(i.first);
             }
 
             // again, visit all neighbours of v
             // for directed graphs, edges1 contains the intersection of both the incoming and the outgoing edges
-            auto answer = transaction.GetEdges(v, 0);
+            auto answer = driver->getedgesbyIID(v);
             for (auto &iu : *answer)
             {
                 uint64_t u = iu.first;
@@ -1334,7 +1368,7 @@ them in parent array as negative numbers. Thus the encoding of parent is:
                 assert(neighbours.count(u) == 1 && "The set `neighbours' should contain all neighbours of v");
 
                 // For the Graphalytics spec v 0.9.0, only consider the outgoing edges for the neighbours u
-                auto answer2 = transaction.GetEdges(u, 0);
+                auto answer2 =  driver->getedgesbyIID(u);
                 for (auto &uj : *answer2)
                 {
                     uint64_t w = uj.first;
@@ -1358,7 +1392,7 @@ them in parent array as negative numbers. Thus the encoding of parent is:
         return ptr_lcc;
     }
 
-    void BACHDriver::lcc(const char *dump2file)
+    void Neo4jDriver::lcc(const char *dump2file)
     {
         if (m_is_directed)
         {
@@ -1368,19 +1402,18 @@ them in parent array as negative numbers. Thus the encoding of parent is:
         utility::TimeoutService timeout{m_timeout};
         Timer timer;
         timer.start();
-        bach::Transaction transaction = m_read_only ? db->BeginReadOnlyTransaction() : db->BeginTransaction();
-        uint64_t max_vertex_id = transaction.GetVertexNum(0);
+        uint64_t max_vertex_id = m_num_vertices;
 
         // Run the LCC algorithm
-        unique_ptr<double[]> scores = do_lcc_undirected(transaction, max_vertex_id, timeout);
+        unique_ptr<double[]> scores = do_lcc_undirected(this, max_vertex_id, timeout);
         if (timeout.is_timeout())
         {
             RAISE_EXCEPTION(TimeoutError, "Timeout occurred after " << timer);
         }
 
         // Translate the vertex IDs
-        auto external_ids = translate(&transaction, scores.get(), max_vertex_id);
-        // read-only transaction, abort == commit
+        auto external_ids = translate(scores.get(), max_vertex_id);
+        // read-only driver, abort == commit
         if (timeout.is_timeout())
         {
             RAISE_EXCEPTION(TimeoutError, "Timeout occurred after " << timer);
@@ -1429,7 +1462,7 @@ them in parent array as negative numbers. Thus the encoding of parent is:
     using WeightT = double;
     static const size_t kMaxBin = numeric_limits<size_t>::max() / 2;
 
-    static gapbs::pvector<WeightT> do_sssp(bach::Transaction &transaction, uint64_t num_edges, uint64_t max_vertex_id, uint64_t source, double delta, utility::TimeoutService &timer)
+    static gapbs::pvector<WeightT> do_sssp(Neo4jDriver* driver, uint64_t num_edges, uint64_t max_vertex_id, uint64_t source, double delta, utility::TimeoutService &timer)
     {
         // Init
         gapbs::pvector<WeightT> dist(max_vertex_id, numeric_limits<WeightT>::infinity());
@@ -1457,7 +1490,7 @@ them in parent array as negative numbers. Thus the encoding of parent is:
                     NodeID u = frontier[i];
                     if (dist[u] >= delta * static_cast<WeightT>(curr_bin_index))
                     {
-                        auto answer = transaction.GetEdges(u, 0);
+                        auto answer =  driver->getedgesbyIID(u);
                         for (auto &i : *answer)
                         {
                             uint64_t v = i.first;
@@ -1528,27 +1561,26 @@ them in parent array as negative numbers. Thus the encoding of parent is:
         return dist;
     }
 
-    void BACHDriver::sssp(uint64_t source_vertex_id, const char *dump2file)
+    void Neo4jDriver::sssp(uint64_t source_vertex_id, const char *dump2file)
     {
         utility::TimeoutService timeout{m_timeout};
         Timer timer;
         timer.start();
-        bach::Transaction transaction = m_read_only ? db->BeginReadOnlyTransaction() : db->BeginTransaction();
         uint64_t num_edges = m_num_edges;
-        uint64_t max_vertex_id = transaction.GetVertexNum(0);
+        uint64_t max_vertex_id = m_num_vertices;
         uint64_t root = ext2int(source_vertex_id);
 
         // Run the SSSP algorithm
         double delta = 2.0; // same value used in the GAPBS, at least for most graphs
-        auto distances = do_sssp(transaction, num_edges, max_vertex_id, root, delta, timeout);
+        auto distances = do_sssp(this, num_edges, max_vertex_id, root, delta, timeout);
         if (timeout.is_timeout())
         {
             RAISE_EXCEPTION(TimeoutError, "Timeout occurred after " << timer);
         }
 
         // Translate the vertex IDs
-        auto external_ids = translate(&transaction, distances.data(), max_vertex_id);
-        // read-only transaction, abort == commit
+        auto external_ids = translate(distances.data(), max_vertex_id);
+        // read-only driver, abort == commit
         if (timeout.is_timeout())
         {
             RAISE_EXCEPTION(TimeoutError, "Timeout occurred after " << timer);
