@@ -22,11 +22,12 @@ namespace BACH
 			TIERING,
 			ELASTIC
 		}
-		MERGING_STRATEGY = MergingStrategy::TIERING;
+		MERGING_STRATEGY = MergingStrategy::LEVELING;
 		size_t MEM_TABLE_MAX_SIZE = 1*1024*1024;//16*1024*1024
-		size_t VERTEX_PROPERTY_MAX_SIZE = 16* 1024 * 1024;
-		vertex_t MEMORY_MERGE_NUM = 256;
-		vertex_t FILE_MERGE_NUM = 4;
+		size_t LEVEL_0_MAX_SIZE = 512 * 1024 * 1024;
+		size_t VERTEX_PROPERTY_MAX_SIZE = 1 * 1024 * 1024 * 1024;
+		vertex_t MEMORY_MERGE_NUM = 8192;
+		vertex_t FILE_MERGE_NUM = 16;
 		size_t READ_BUFFER_SIZE = 1024 * 1024;
 		size_t WRITE_BUFFER_SIZE = 1024 * 1024;
 		size_t NUM_OF_COMPACTION_THREAD = 8;
@@ -34,6 +35,8 @@ namespace BACH
 		size_t MAX_FILE_READER_CACHE_SIZE = 256;
 		size_t MAX_WORKER_THREAD = 16;
 		double FALSE_POSITIVE = 0.01;
+		size_t MAX_LEVEL = 5;
+		size_t LEVEL_SIZE_RITIO = 10;
 	};
 #else
 	struct Options;
@@ -58,8 +61,7 @@ namespace bach
 		Transaction BeginReadOnlyTransaction();
 		void AddVertexLabel(std::string label_name);
 		void AddEdgeLabel(std::string label_name,
-						  std::string src_label_name, std::string dst_label_name);
-
+			std::string src_label_name, std::string dst_label_name);
 	private:
 		const std::unique_ptr<BACH::DB> db;
 	};
@@ -68,19 +70,22 @@ namespace bach
 	public:
 		Transaction(std::unique_ptr<BACH::Transaction> _txn);
 		~Transaction();
-		vertex_t AddVertex(label_t label, std::string_view property);
+		vertex_t AddVertex(label_t label);
+		void PutVertex(label_t label, vertex_t vertex_id, std::string_view property);
 		std::shared_ptr<std::string> GetVertex(vertex_t vertex, label_t label);
 		void DelVertex(vertex_t vertex, label_t label);
 		vertex_t GetVertexNum(label_t label);
 
 		void PutEdge(vertex_t src, vertex_t dst, label_t label,
-					 edge_property_t property, bool delete_old = false);
+			edge_property_t property, bool delete_old = false);
 		void DelEdge(vertex_t src, vertex_t dst, label_t label);
 		edge_property_t GetEdge(
 			vertex_t src, vertex_t dst, label_t label);
 		std::shared_ptr<std::vector<std::pair<vertex_t, edge_property_t>>>
-		GetEdges(vertex_t src, label_t label, bool (*func)(edge_property_t) = [](edge_property_t x)
-											  { return true; });
+			GetEdges(vertex_t src, label_t label,
+				const std::function<bool(edge_property_t&)>& func = [](edge_property_t x) {return true; });
+		void EdgeLabelScan(label_t label,
+			const std::function<void(vertex_t&, vertex_t&,edge_property_t&)>& func);
 
 	private:
 		const std::unique_ptr<BACH::Transaction> txn;

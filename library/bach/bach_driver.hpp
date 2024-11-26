@@ -40,11 +40,6 @@ protected:
     std::chrono::seconds m_timeout {0}; // the budget to complete each of the algorithms in the Graphalytics suite
 
 
-    // Retrieve the internal vertex ID for the given external vertex. If the vertex does not exist, it raises an internal error
-    uint64_t ext2int(uint64_t external_vertex_id) const;
-
-    // Retrieve the internal vertex ID for the given internal vertex ID. If the vertex does not exist, it returns uint64_t::max()
-    uint64_t int2ext(void* transaction, uint64_t internal_vertex_id) const;
 
     // Helper for Graphalytics: translate the logical IDs into external IDs
     template <typename T>
@@ -66,6 +61,11 @@ public:
      */
     virtual ~BACHDriver();
 
+    // Retrieve the internal vertex ID for the given external vertex. If the vertex does not exist, it raises an internal error
+    uint64_t ext2int(uint64_t external_vertex_id) const;
+
+    // Retrieve the internal vertex ID for the given internal vertex ID. If the vertex does not exist, it returns uint64_t::max()
+    uint64_t int2ext(void* transaction, uint64_t internal_vertex_id) const;
     /**
      * Get the number of edges contained in the graph
      */

@@ -22,11 +22,14 @@
 #include <future>
 #include <thread>
 #include <vector>
+#include <tbb/tbb.h>
 
 #include "common/database.hpp"
+#include "common/quantity.hpp"
 #include "common/system.hpp"
 #include "common/timer.hpp"
 #include "details/build_thread.hpp"
+#include "details/latency.hpp"
 #include "configuration.hpp"
 #include "library/interface.hpp"
 
@@ -36,8 +39,8 @@ using namespace std;
 
 namespace gfe::experiment {
 
-InsertOnly::InsertOnly(std::shared_ptr<gfe::library::UpdateInterface> interface, std::shared_ptr<gfe::graph::WeightedEdgeStream> graph, int64_t num_threads) :
-        m_interface(interface), m_stream(graph), m_num_threads(num_threads) {
+InsertOnly::InsertOnly(std::shared_ptr<gfe::library::UpdateInterface> interface, std::shared_ptr<gfe::graph::WeightedEdgeStream> graph, int64_t num_threads, bool measure_latency) :
+        m_interface(interface), m_stream(graph), m_num_threads(num_threads), m_measure_latency(measure_latency), m_latencies(measure_latency?new uint64_t[graph->num_edges()]:nullptr) {
     if(m_num_threads == 0) ERROR("Invalid number of threads: " << m_num_threads);
 }
 
@@ -51,10 +54,19 @@ void InsertOnly::set_build_frequency(std::chrono::milliseconds millisecs){
 }
 
 // Execute an update at the time
-static void run_sequential(library::UpdateInterface* interface, graph::WeightedEdgeStream* graph, uint64_t start, uint64_t end){
+template<bool measure_latency>
+static void run_sequential(library::UpdateInterface* interface, graph::WeightedEdgeStream* graph, uint64_t start, uint64_t end, uint64_t* lantency){
     for(uint64_t pos = start; pos < end; pos++){
         auto edge = graph->get(pos);
-        [[maybe_unused]] bool result = interface->add_edge_v2(edge);
+        [[maybe_unused]] bool result;
+        if(measure_latency)
+        {
+            auto start_time = chrono::steady_clock::now();
+            result = interface->add_edge_v2(edge);
+            lantency[pos]=std::chrono::duration_cast<std::chrono::microseconds>(chrono::steady_clock::now()-start_time).count();
+        }
+        else
+            result = interface->add_edge_v2(edge);
         assert(result == true && "Edge not inserted");
     }
 }
@@ -63,11 +75,9 @@ void InsertOnly::execute_round_robin(){
     vector<thread> threads;
 
     atomic<uint64_t> start_chunk_next = 0;
-
     for(int64_t i = 0; i < m_num_threads; i++){
         threads.emplace_back([this, &start_chunk_next](int thread_id){
             concurrency::set_thread_name("Worker #" + to_string(thread_id));
-
             auto interface = m_interface.get();
             auto graph = m_stream.get();
             uint64_t start;
@@ -77,7 +87,10 @@ void InsertOnly::execute_round_robin(){
 
             while( (start = start_chunk_next.fetch_add(m_scheduler_granularity)) < size ){
                 uint64_t end = std::min<uint64_t>(start + m_scheduler_granularity, size);
-                run_sequential(interface, graph, start, end);
+                if(m_measure_latency)
+                    run_sequential<true>(interface, graph, start, end, m_latencies);
+                else
+                    run_sequential<false>(interface, graph, start, end, m_latencies);
             }
 
             interface->on_thread_destroy(thread_id);
@@ -96,7 +109,6 @@ chrono::microseconds InsertOnly::execute() {
         if(m_scheduler_granularity == 0) m_scheduler_granularity = 1; // corner case
         LOG("InsertOnly: reset the scheduler granularity to " << m_scheduler_granularity << " edge insertions per thread");
     }
-
     // Execute the insertions
     m_interface->on_main_init(m_num_threads /* build thread */ +1);
     m_interface->updates_start();
@@ -144,6 +156,18 @@ void InsertOnly::save() {
     db.add("num_edges", m_stream->num_edges());
     db.add("num_snapshots_created", m_interface->num_levels());
     db.add("num_build_invocations", m_num_build_invocations);
+    uint64_t p99=0;
+    if(m_measure_latency){
+        assert(m_latencies != nullptr);
+
+        auto result = LatencyStatistics::compute_statistics(m_latencies, m_stream->num_edges());
+
+        LOG(" Average latency of updates: " << DurationQuantity(result.mean()) << ", 99th percentile: " << DurationQuantity(result.percentile99()));
+
+        p99 = uint64_t(result.percentile99().count());
+        delete[] m_latencies; m_latencies = nullptr; // free some memory
+    }
+    db.add("p99latency", p99);
     // missing revision: until 25/Nov/2019
     // version 20191125: build thread, build frequency taken into account, scheduler set to round_robin, removed batch updates
     // version 20191210: difference between num_build_invocations (explicit invocations to #build()) and num_snapshots_created (actual number of deltas created by the impl)

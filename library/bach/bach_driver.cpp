@@ -172,7 +172,8 @@ namespace gfe::library
             bach::vertex_t internal_id = 0;
             auto tx = db->BeginTransaction();
             string_view data{(char *)&external_id, sizeof(external_id)};
-            internal_id = tx.AddVertex(0, data);
+            internal_id = tx.AddVertex(0);
+            tx.PutVertex(0, internal_id, data);
             // LOG(external_id<<" "<<((uint64_t*)(data.data()))[0]);
             // string_view res=tx.GetVertex(internal_id,0);
             // LOG(((uint64_t*)(res.data()))[0]);
@@ -342,12 +343,14 @@ namespace gfe::library
             {
                 string_view data{(char *)&edge.m_source, sizeof(edge.m_source)};
 
-                internal_source_id = tx.AddVertex(0, data);
+                internal_source_id = tx.AddVertex(0);
+                tx.PutVertex(0, internal_source_id, data);
             }
             if (insert_destination)
             {
                 string_view data{(char *)&edge.m_destination, sizeof(edge.m_destination)};
-                internal_destination_id = tx.AddVertex(0, data);
+                internal_destination_id = tx.AddVertex(0);
+                tx.PutVertex(0, internal_destination_id, data);
             }
 
             // insert the edge
@@ -1003,7 +1006,6 @@ them in parent array as negative numbers. Thus the encoding of parent is:
     // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
     // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#define DEBUG_WCC
 #if defined(DEBUG_WCC)
 #define COUT_DEBUG_WCC(msg) COUT_DEBUG(msg)
 #else

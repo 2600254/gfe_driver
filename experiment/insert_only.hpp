@@ -42,6 +42,8 @@ class InsertOnly {
     uint64_t m_time_insert = 0; // the amount of time to insert all elements in the database, in microseconds
     uint64_t m_time_build = 0; // the amount of time to build the last snapshot/delta/level in the library, in microseconds
     uint64_t m_num_build_invocations = 0; // number of times the method #build() has been invoked
+    bool m_measure_latency = false; // whether to measure the latency of each insertion
+    uint64_t* m_latencies = nullptr; // nanosecs
 
     // Execute the experiment with the round robin scheduler
     void execute_round_robin();
@@ -53,7 +55,7 @@ public:
     // @param num_threads the parallelism degree, that is the number of threads to employ to insert concurrently all edges from the stream
     // @param measure_latency if requested, report the median/min/max/percentiles measured latencies in insertions. Measuring the latency
     //        could introduce additional overhead and decrease the measure for the overall throughput
-    InsertOnly(std::shared_ptr<gfe::library::UpdateInterface> interface, std::shared_ptr<gfe::graph::WeightedEdgeStream> stream, int64_t num_threads);
+    InsertOnly(std::shared_ptr<gfe::library::UpdateInterface> interface, std::shared_ptr<gfe::graph::WeightedEdgeStream> stream, int64_t num_threads, bool measure_latency);
 
     // Advanced and/or internal parameter, set the granularity of chunks sent by the internal scheduler to the worker threads. The granularity
     // here is given by the number of edge insertions in each chunk.
