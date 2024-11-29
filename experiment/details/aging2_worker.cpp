@@ -283,7 +283,7 @@ void Aging2Worker::main_load_edges(uint64_t* edges, uint64_t num_edges){
     if(m_updates.empty()){ m_updates.append(new vector<graph::WeightedEdge>()); }
     vector<graph::WeightedEdge>* last = m_updates[m_updates.size() -1];
 
-    constexpr uint64_t last_max_sz = (1ull << 22); // 4M
+    constexpr uint64_t last_max_sz = (1ull << 20); // 4M
     const uint64_t modulo = m_master.parameters().m_num_threads;
 
     uint64_t* __restrict sources = edges;
@@ -291,32 +291,59 @@ void Aging2Worker::main_load_edges(uint64_t* edges, uint64_t num_edges){
     double* __restrict weights = reinterpret_cast<double*>(destinations + num_edges);
 
     uniform_real_distribution<double> rndweight{0, m_master.parameters().m_max_weight}; // in [0, max_weight)
-
-    for(uint64_t i = 0; i < num_edges; i++){
-        if(static_cast<int>((sources[i] + destinations[i]) % modulo) == m_worker_id){
-            if(last->size() > last_max_sz){
+    if(m_master.m_parameters.m_timestamped){
+        uint64_t start;
+        while((start = m_master.m_current_operations_started.fetch_add(last_max_sz)) < num_edges){
+            uint64_t end=std::min<uint64_t>(start + last_max_sz, num_edges);
+            for(uint64_t i = start; i < end; i++){
                 last = new vector<graph::WeightedEdge>();
                 m_updates.append(last);
+                // counters
+                double weight = weights[i];
+                if(weight >= 0){
+                    m_num_edge_insertions++;
+                } else {
+                    m_num_edge_deletions++;
+                }
+
+                // generate a random weight
+                if(weight == 0.0){
+                    weight = rndweight(m_random); // in [0, max_weight)
+                    if(weight == 0.0) weight = m_master.parameters().m_max_weight; // in (0, max_weight]
+                }
+
+                last->emplace_back(sources[i], destinations[i], weight);
             }
-
-            // counters
-            double weight = weights[i];
-            if(weight >= 0){
-                m_num_edge_insertions++;
-            } else {
-                m_num_edge_deletions++;
-            }
-
-            // generate a random weight
-            if(weight == 0.0){
-                weight = rndweight(m_random); // in [0, max_weight)
-                if(weight == 0.0) weight = m_master.parameters().m_max_weight; // in (0, max_weight]
-            }
-
-
-            last->emplace_back(sources[i], destinations[i], weight);
         }
     }
+    else{
+        for(uint64_t i = 0; i < num_edges; i++){
+            if(static_cast<int>((sources[i] + destinations[i]) % modulo) == m_worker_id){
+                if(last->size() > last_max_sz){
+                    last = new vector<graph::WeightedEdge>();
+                    m_updates.append(last);
+                }
+
+                // counters
+                double weight = weights[i];
+                if(weight >= 0){
+                    m_num_edge_insertions++;
+                } else {
+                    m_num_edge_deletions++;
+                }
+
+                // generate a random weight
+                if(weight == 0.0){
+                    weight = rndweight(m_random); // in [0, max_weight)
+                    if(weight == 0.0) weight = m_master.parameters().m_max_weight; // in (0, max_weight]
+                }
+
+
+                last->emplace_back(sources[i], destinations[i], weight);
+            }
+        }
+    }
+
 }
 
 void Aging2Worker::main_remove_vertices(uint64_t* vertices, uint64_t num_vertices){

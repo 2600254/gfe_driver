@@ -39,6 +39,7 @@ class Aging2Master {
     const Aging2Experiment& m_parameters;
     const bool m_is_directed; // is the graph directed?
     std::vector<Aging2Worker*> m_workers; // pool of workers
+    std::atomic<int64_t> m_current_operations_started = 0; 
     std::atomic<int64_t> m_num_operations_performed = 0; // current number of operations performed so far
     std::atomic<int> m_last_progress_reported = 0; // the last progress of the experiment, reported by any of the worker threads. E.g. 1%, 2%, 3%, so on.
 

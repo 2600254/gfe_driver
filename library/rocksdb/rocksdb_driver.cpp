@@ -194,7 +194,7 @@ namespace gfe::library
         }
         else
         {
-            ERROR("The given vertex does not exist: " << external_vertex_id);
+            return numeric_limits<uint64_t>::max();
         }
     }
 

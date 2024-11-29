@@ -60,6 +60,7 @@ class Aging2Experiment {
     bool m_measure_latency = false; // whether to measure the latency of updates
     std::chrono::seconds m_timeout {0}; // max time to run the simulation (excl. cool-off time)
     std::chrono::seconds m_cooloff {0}; // number of seconds to wait after the experiment terminates, to check the effectiveness of the GC
+    bool m_timestamped = false; // whether the graph is timestamped
 
     details::Aging2Master* m_master;
 public:
@@ -103,6 +104,8 @@ public:
 
     // Set the max time to run the experiment
     void set_timeout(std::chrono::seconds secs);
+
+    void set_timestamped(bool value);
 
     // Cool-off period. Number of seconds to wait idle after the simulation terminated, measuring the memory footprint
     void set_cooloff(std::chrono::seconds secs);

@@ -63,7 +63,7 @@ static void run_sequential(library::UpdateInterface* interface, graph::WeightedE
         {
             auto start_time = chrono::steady_clock::now();
             result = interface->add_edge_v2(edge);
-            lantency[pos]=std::chrono::duration_cast<std::chrono::microseconds>(chrono::steady_clock::now()-start_time).count();
+            lantency[pos]=std::chrono::duration_cast<std::chrono::nanoseconds>(chrono::steady_clock::now()-start_time).count();
         }
         else
             result = interface->add_edge_v2(edge);

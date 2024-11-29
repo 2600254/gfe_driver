@@ -144,6 +144,7 @@ static void run_standalone(int argc, char* argv[]){
               agingExperiment.set_measure_latency(configuration().measure_latency());
               agingExperiment.set_num_reports_per_ops(configuration().get_num_recordings_per_ops());
               agingExperiment.set_timeout(chrono::seconds{configuration().get_timeout_aging2()});
+              agingExperiment.set_timestamped(configuration().is_timestamped_graph());
               agingExperiment.set_measure_memfp(configuration().measure_memfp());
               agingExperiment.set_memfp_physical(configuration().get_aging_memfp_physical());
               agingExperiment.set_memfp_threshold(configuration().get_aging_memfp_threshold());
@@ -180,6 +181,7 @@ static void run_standalone(int argc, char* argv[]){
               experiment.set_measure_latency(configuration().measure_latency());
               experiment.set_num_reports_per_ops(configuration().get_num_recordings_per_ops());
               experiment.set_timeout(chrono::seconds{configuration().get_timeout_aging2()});
+              experiment.set_timestamped(configuration().is_timestamped_graph());
               experiment.set_measure_memfp(configuration().measure_memfp());
               experiment.set_memfp_physical(configuration().get_aging_memfp_physical());
               experiment.set_memfp_threshold(configuration().get_aging_memfp_threshold());

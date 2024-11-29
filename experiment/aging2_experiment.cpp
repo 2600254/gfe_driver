@@ -112,6 +112,9 @@ void Aging2Experiment::set_worker_granularity(uint64_t value){
     if(value < 1){ INVALID_ARGUMENT("value < 1: " << value); }
     m_worker_granularity = value;
 }
+void Aging2Experiment::set_timestamped(bool value){
+    m_timestamped = value;
+}
 
 void Aging2Experiment::set_cooloff(std::chrono::seconds secs){
     m_cooloff = secs;
