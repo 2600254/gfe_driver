@@ -601,7 +601,8 @@ them in parent array as negative numbers. Thus the encoding of parent is:
                 {
                     uint64_t dst = key2edge(it->key().data()).second;
                     COUT_DEBUG_BFS("\toutgoing edge: " << dst);
-
+                    if(dst >= max_vertex_id)
+                        continue;
                     int64_t curr_val = distances[dst];
                     if (curr_val < 0 && gapbs::compare_and_swap(distances[dst], curr_val, distance))
                     {
@@ -907,6 +908,8 @@ them in parent array as negative numbers. Thus the encoding of parent is:
                      it->Next())
                 {
                     uint64_t u = key2edge(it->key().data()).second;
+                    if(u>=max_vertex_id)
+                        continue;
                     incoming_total += outgoing_contrib[u];
                 }
                 delete it;
@@ -986,7 +989,6 @@ them in parent array as negative numbers. Thus the encoding of parent is:
     // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
     // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#define DEBUG_WCC
 #if defined(DEBUG_WCC)
 #define COUT_DEBUG_WCC(msg) COUT_DEBUG(msg)
 #else
@@ -1060,6 +1062,8 @@ them in parent array as negative numbers. Thus the encoding of parent is:
                      it->Next())
                 {
                     uint64_t v = key2edge(it->key().data()).second;
+                    if(v>=max_vertex_id)
+                        continue;
 
                     uint64_t comp_u = comp[u];
                     uint64_t comp_v = comp[v];
@@ -1175,6 +1179,8 @@ them in parent array as negative numbers. Thus the encoding of parent is:
                      it->Next())
                 {
                     uint64_t u = key2edge(it->key().data()).second;
+                    if(u>=max_vertex_id)
+                        continue;
                     histogram[labels0[u]]++;
                 }
                 delete it;
@@ -1464,6 +1470,8 @@ them in parent array as negative numbers. Thus the encoding of parent is:
                              it->Next())
                         {
                             uint64_t v = key2edge(it->key().data()).second;
+                            if(v>=max_vertex_id)
+                                continue;
                             double w = value2num(it->value().data());
 
                             WeightT old_dist = dist[v];
