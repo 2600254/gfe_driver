@@ -65,12 +65,11 @@ mkdir build && cd build
 
 ##### RocksDB
 
-Download the library from https://github.com/2600254/BACH_demo. 
 ```
 apt-get install librocksdb-dev
 git clone https://github.com/facebook/rocksdb
 ```
-Then configure the driver by pointing the path to the header files of rocksdb:
+Then configure the driver by pointing the path to the header files of RocksDB:
 
 ```
 mkdir build && cd build
