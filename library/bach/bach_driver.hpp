@@ -53,8 +53,9 @@ public:
      * Create an instance of BACH
      * @param is_directed: whether the underlying graph should be directed or undirected
      * @param read_only: whether to use read-only transactions for the algorithms in Graphalytics
+     * @param merging_strategy: merging_strategy of BACH
      */
-    BACHDriver(bool is_directed, bool read_only = true);
+    BACHDriver(bool is_directed, bool read_only = true, uint64_t merging_strategy = 0);
 
     /**
      * Destructor
@@ -129,6 +130,7 @@ public:
      */
     virtual bool remove_edge(gfe::graph::Edge e);
 
+    virtual void build(); // merge all file to level
     /**
      * Dump the content of the graph to given stream.
      */

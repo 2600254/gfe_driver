@@ -605,7 +605,7 @@ AC_ARG_WITH([rocksdb], [AS_HELP_STRING([--with-rocksdb@<:@=ARG@:>@], [
 if ( test x"${with_rocksdb}" != x"" && test x"${with_rocksdb}" != "no" ); then
 
     if( test x"${with_rocksdb}" == x"yes" ); then
-        AC_MSG_ERROR(["the full path to the RocksDB library needs to be set, e.g. --with-rocksddb=/path/to/rocksdb"]);
+        AC_MSG_ERROR(["the full path to the RocksDB library needs to be set, e.g. --with-rocksdb=/path/to/rocksdb"]);
     fi
     rocksdb_includedir="";
     AC_CHECK_FILE([${with_rocksdb}/rocksdb/db.h], [rocksdb_includedir="${with_rocksdb}"])

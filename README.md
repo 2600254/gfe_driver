@@ -63,7 +63,19 @@ mkdir build && cd build
 ../configure --enable-optimize --disable-debug --with-bach=/path/to/BACH_demo/build
 ```
 
-You can run BACH's benchmark by `-l bach_ro`.
+##### RocksDB
+
+Download the library from https://github.com/2600254/BACH_demo. 
+```
+apt-get install librocksdb-dev
+git clone https://github.com/facebook/rocksdb
+```
+Then configure the driver by pointing the path to the header files of rocksdb:
+
+```
+mkdir build && cd build
+../configure --enable-optimize --disable-debug --with-rocksdb=/path/to/rocksdb
+```
 
 
 ##### Stinger
@@ -202,6 +214,7 @@ In our experiments, we used the following input graphs and data sets:
   were generated with another [ad-hoc tool](https://github.com/whatsthecraic/graphlog). 
 - `yahoo-songs` and `edit-enwiki` were taken from the [Konect webpage](http://konect.cc/networks/) they were prepared 
   for our experiments by sorting them by timestamp and removing duplicates by using `tools/timestampd_graph_2_edge_list.py`.  
+- `uk-2007-05` can be found at [there](https://1drv.ms/u/c/db6587cfda88e436/EU-ZDzgc321Elbu8RJsbK4ABgiFabEzsdTxF8F87kFJ65w?e=UbF0AP), which is derived by reformatting the data from [there](https://sites.cc.gatech.edu/dimacs10/archive/clustering.shtml).
 
 A complete image of all datasets used in the experiments can be downloaded from Zenodo: [input graphs](https://zenodo.org/record/3966439),
 [graph logs](https://zenodo.org/record/3967002), [dense friendster](https://zenodo.org/record/5146230) and [timestamped graphs](https://zenodo.org/record/5752476).
@@ -242,115 +255,59 @@ The database `output_results.sqlite3` will contain the final results. Refer to [
 
 These are the full commands to repeat the experiments in the paper:
 
-##### Access Patterns (Figure 2)
+##### GTP Throughput (Figure 6)
 
 ```bash
-# (a)
-./gfe_driver  -u  -R 5 -d results.sqlite3 -l mb-csr.8 -G /path/to/input/graph500-24.properties -w 56
-./gfe_driver  -u  -R 5 -d results.sqlite3 -l csr3-lcc-numa -G /path/to/input/graph500-24.properties -w 56 --load 
-./gfe_driver  -u  -R 5 -d results.sqlite3 -l sorted_vector_al.6 -G /path/to/input/graph500-24.properties -w 56
-
-# (b)
-./gfe_driver  -u  -R 5 -d results.sqlite3 -l sortledton.3 -G /path/to/input/graph500-24.properties -w 56 --block_size 16
-./gfe_driver  -u  -R 5 -d results.sqlite3 -l sortledton.3 -G /path/to/input/graph500-24.properties -w 56 --block_size 32
-./gfe_driver  -u  -R 5 -d results.sqlite3 -l sortledton.3 -G /path/to/input/graph500-24.properties -w 56 --block_size 64
-./gfe_driver  -u  -R 5 -d results.sqlite3 -l sortledton.3 -G /path/to/input/graph500-24.properties -w 56 --block_size 128
-./gfe_driver  -u  -R 5 -d results.sqlite3 -l sortledton.3 -G /path/to/input/graph500-24.properties -w 56 --block_size 256
-./gfe_driver  -u  -R 5 -d results.sqlite3 -l sortledton.3 -G /path/to/input/graph500-24.properties -w 56 --block_size 512
-./gfe_driver  -u  -R 5 -d results.sqlite3 -l sortledton.3 -G /path/to/input/graph500-24.properties -w 56 --block_size 1024
-
-# vs sortedvector
-#
-# (c)
-./gfe_driver  -u  -R 5 -d results.sqlite3 -l teseo-lcc.12 -G /path/to/input/graph500-24.properties -w 56
-./gfe_driver  -u  -R 5 -d results.sqlite3 -l teseo-lcc-dv.12b -G /path/to/input/graph500-24-dense.properties -w 56
+libraries=("bach_ro_leveling" "bach_ro_tiering" "livegraph3_ro" "rocksdb" "llama8-ref")
+datasets=("datagen-8_5-fb" "graph500-26" "com-friendster" "uk-2007-05")
+for dataset in "${datasets[@]}"; do
+  for library in "${libraries[@]}"; do
+    ./gfe_driver -u -d results.sqlite3 -l $library -G /path/to/input/$dataset.properties -w 16 --latency true 
+    ./gfe_driver -u -d results.sqlite3 -l $library -G /path/to/input/$dataset.properties -w 16 --latency true --is_timestamped true
+    ./gfe_driver -u -d results.sqlite3 -l $library -G /path/to/input/$dataset.properties -w 16 --log /path/to/input/$dataset-0.3.graphlog --aging_timeout 10h --latency true --is_timestamped true
+  done
+done
 ```
 
-##### Block Size Insertion Speed (Figure 7)
+##### Graph Analytical Processing Performance (Figure 7(A)-(F))
 
 ```bash
-./gfe_driver  -u  -R 5 -d results.sqlite3 -l sorted_vector_al.6 -G /path/to/input/graph500-24.properties -w 56
-./gfe_driver  -u  -R 5 -d results.sqlite3 -l sortledton.3 -G /path/to/input/graph500-24.properties -w 56 --block_size 16
-./gfe_driver  -u  -R 5 -d results.sqlite3 -l sortledton.3 -G /path/to/input/graph500-24.properties -w 56 --block_size 32
-./gfe_driver  -u  -R 5 -d results.sqlite3 -l sortledton.3 -G /path/to/input/graph500-24.properties -w 56 --block_size 64
-./gfe_driver  -u  -R 5 -d results.sqlite3 -l sortledton.3 -G /path/to/input/graph500-24.properties -w 56 --block_size 128
-./gfe_driver  -u  -R 5 -d results.sqlite3 -l sortledton.3 -G /path/to/input/graph500-24.properties -w 56 --block_size 256
-./gfe_driver  -u  -R 5 -d results.sqlite3 -l sortledton.3 -G /path/to/input/graph500-24.properties -w 56 --block_size 512
-./gfe_driver  -u  -R 5 -d results.sqlite3 -l sortledton.3 -G /path/to/input/graph500-24.properties -w 56 --block_size 1024
+libraries=("bach_ro_leveling" "bach_ro_tiering" "livegraph3_ro" "rocksdb" "llama8-ref")
+datasets=("datagen-8_5-fb" "graph500-26" "com-friendster" "uk-2007-05")
+for dataset in "${datasets[@]}"; do
+  for library in "${libraries[@]}"; do
+    ./gfe_driver -u -R 5 -d results.sqlite3 -l $library -G /path/to/input/$dataset.properties -w 16  
+  done
+done
 ```
 
-##### Direct Access (Figure 8)
+##### HGTAP Performance (Figure 8(a))
 For all graphs with 5 runs.
 
 ```bash
-./gfe_driver  -u  -R 5 -d ./results.sqlite3 -l sorted_vector_al.6 -G /path/to/input/graph.properties -w 56
-./gfe_driver  -u  -R 5 -d ./results.sqlite3 -l edgeiter_sorted_vector_al.3 -G /path/to/input/graph.properties -w 56
-```
-
-##### Insertions and Graphalytics (Figure 9, 10 and 13)
-
-For all graphs with 5 runs.
-```bash
-./gfe_driver  -u  -R 5 -d results.sqlite3 -l mb-csr.8 -G /path/to/input/graph.properties -w 56
-./gfe_driver  -u  -R 5 -d ./results.sqlite3 -l csr3-lcc-numa -G /path/to/input/graph.properties -w 56 --load
-./gfe_driver  -u  -R 5 -d ./results.sqlite3 -l teseo-lcc.12 -G /path/to/input/graph.properties -w 56
-./gfe_driver  -u  -R 5 -d ./results.sqlite3 -l teseo-lcc-dv.12b -G /path/to/input/graph.properties-dense -w 56
-./gfe_driver  -u  -R 5 -d ./results.sqlite3 -l stinger7-ref -G /path/to/input/graph.properties -w 56
-./gfe_driver  -u  -R 5 -d ./results.sqlite3 -l livegraph3_ro -G /path/to/input/graph.properties -w 20
-./gfe_driver  -u  -R 5 -d ./results.sqlite3 -l llama8-ref -G /path/to/input/graph.properties -w 16 --build_frequency 10s
-./gfe_driver  -u  -R 5 -d ./results.sqlite3 -l g1_v6-ref-ignore-build -G /path/to/input/graph.properties -w 20
-./gfe_driver  -u  -R 5 -d ./results.sqlite3 -l sortledton.3 -G /path/to/input/graph.properties -w 56 --block_size 512
-```
-
-The graphs `graph.properties-dense` are analogous to their corresponding `graph.properties`,
-but with the vertices relabelled into a dense domain. These graphs are included in the archive
-loaded in [Zenodo](https://zenodo.org/record/3966439) and [dense friendster](https://zenodo.org/record/5146230).
-
-For `yahoo-songs` and `wiki_edit` graphs with 5 runs:
-```bash
-# Ordered runs
-./gfe_driver  -u  -R 0 -d ./results.sqlite3 -l teseo-lcc.12 -G /path/to/input/graph -w 56 -r 32 --is_timestamped true
-./gfe_driver  -u  -R 0 -d ./results.sqlite3 -l stinger7-ref -G /path/to/input/graph -w 56 -r 32 --is_timestamped true
-./gfe_driver  -u  -R 0 -d ./results.sqlite3 -l livegraph3_ro -G /path/to/input/graph -w 20 -r 32 --is_timestamped true
-./gfe_driver  -u  -R 0 -d ./results.sqlite3 -l llama8-ref -G /path/to/input/graph -w 16 -r 32 --build_frequency 10s --is_timestamped true
-./gfe_driver  -u  -R 0 -d ./results.sqlite3 -l g1_v6-ref-ignore-build -G /path/to/input/graph -w 20 -r 32 --is_timestamped true
-./gfe_driver  -u  -R 0 -d ./results.sqlite3 -l sortledton.4 -G /path/to/input/graph -w 56 -r 32 --is_timestamped true --block_size 512
-
-# Shuffled runs
-./gfe_driver  -u  -R 0 -d ./results.sqlite3 -l teseo-lcc.12 -G /path/to/input/graph -w 56 -r 32
-./gfe_driver  -u  -R 0 -d ./results.sqlite3 -l stinger7-ref -G /path/to/input/graph -w 56 -r 32
-./gfe_driver  -u  -R 0 -d ./results.sqlite3 -l livegraph3_ro -G /path/to/input/graph -w 20 -r 32
-./gfe_driver  -u  -R 0 -d ./results.sqlite3 -l llama8-ref -G /path/to/input/graph -w 16 -r 32 --build_frequency 10s
-./gfe_driver  -u  -R 0 -d ./results.sqlite3 -l g1_v6-ref-ignore-build -G /path/to/input/graph -w 20 -r 32
-./gfe_driver  -u  -R 0 -d ./results.sqlite3 -l sortledton.4 -G /path/to/input/graph -w 56 -r 32 --block_size 512
-```
-
-Shuffled and ordered are not marked differently in the result database. This needs to be done manually; we
-run them on different machines.
-
-##### Scalability (Figure 12)
-For `graph500-24` and p in {1,2,4,8,14,28,42,56} and 5 runs.
-
-```bash
-./gfe_driver  -u  -R 0 -d ./results.sqlite3 -l teseo-lcc.12 -G /path/to/input/graph.properties -w p
-./gfe_driver  -u  -R 0 -d ./results.sqlite3 -l teseo-lcc-dv.12b -G /path/to/input/graph.properties-dense -w p
-./gfe_driver  -u  -R 0 -d ./results.sqlite3 -l stinger7-ref -G /path/to/input/graph.properties -w p
-./gfe_driver  -u  -R 0 -d ./results.sqlite3 -l livegraph3_ro -G /path/to/input/graph.properties -w p
-./gfe_driver  -u  -R 0 -d ./results.sqlite3 -l llama8-ref -G /path/to/input/graph.properties -w p --build_frequency 10s
-./gfe_driver  -u  -R 0 -d ./results.sqlite3 -l g1_v6-ref-ignore-build -G /path/to/input/graph.properties -w p
-./gfe_driver  -u  -R 0 -d ./results.sqlite3 -l sortledton.3 -G /path/to/input/graph.properties -w p --block_size 512
-```
-
-##### Updates (Figure 11)
-For `graph500-24` and `uniform-24` and the graphlogs from Zenodo.
-
-```bash
-./gfe_driver  -u  -R 0 -d ./results.sqlite3 -l teseo-lcc.12 -G /path/to/input/graph.properties -w 56 --log /path/to/graph/log --aging_timeout 10h --aging_memfp  --aging_memfp_physical  --aging_release_memory false
-./gfe_driver  -u  -R 0 -d ./results.sqlite3 -l stinger7-ref -G /path/to/input/graph.properties -w 56 --log /path/to/graph/log --aging_timeout 10h --aging_memfp  --aging_memfp_physical  --aging_release_memory false
-./gfe_driver  -u  -R 0 -d ./results.sqlite3 -l livegraph3_ro -G /path/to/input/graph.properties -w 20 --log /path/to/graph/log --aging_timeout 10h --aging_memfp  --aging_memfp_physical  --aging_release_memory false
-./gfe_driver  -u  -R 0 -d ./results.sqlite3 -l llama8-ref -G /path/to/input/graph.properties -w 16 --build_frequency 10s --log /path/to/graph/log --aging_timeout 10h --aging_memfp  --aging_memfp_physical  --aging_release_memory false --aging_memfp_threshold 230G
-./gfe_driver  -u  -R 0 -d ./results.sqlite3 -l g1_v6-ref-ignore-build -G /path/to/input/graph.properties -w 20 --log /path/to/graph/log --aging_timeout 10h --aging_memfp  --aging_memfp_physical  --aging_release_memory false
-./gfe_driver  -u  -R 0 -d ./results.sqlite3 -l sortledton.3 -G /path/to/input/graph.properties -w 56 --log /path/to/graph/log --aging_timeout 10h --aging_memfp  --aging_memfp_physical  --aging_release_memory false --block_size 512
+libraries_bach=("bach_ro_elastic" "bach_ro_tiering" "bach_ro_leveling")
+datasets=("datagen-8_5-fb" "graph500-26" "com-friendster")
+for dataset in "${datasets[@]}"; do
+  for library in "${libraries_bach[@]}"; do
+    ./gfe_driver -u -d results.sqlite3 -l $library -G /path/to/input/$dataset.properties -w 16 -r 16 --log /path/to/input/$dataset-0.5.graphlog --aging_timeout 10h --mixed_workload true -R 1
+  done
+done
+libraries=("livegraph3_ro" "rocksdb")
+for dataset in "${datasets[@]}"; do
+  for library in "${libraries[@]}"; do
+    ./gfe_driver -u -d results.sqlite3 -l $library -G /path/to/input/$dataset.properties -w 16 -r 16 --log /path/to/input/$dataset-0.5.graphlog --aging_timeout 10h --mixed_workload true -R 1
+  done
+done
+for dataset in "${datasets[@]}"; do
+  for library in "${libraries_bach[@]}"; do
+    ./gfe_driver -u -d results.sqlite3 -l $library -G /path/to/input/graph500-26.properties -w 16 -r 16 --log /path/to/input/graph500-26-0.5-sq.graphlog --aging_timeout 10h --mixed_workload true -R 1 --is_timestamped true
+  done
+done
+for dataset in "${datasets[@]}"; do
+  for library in "${libraries[@]}"; do
+    ./gfe_driver -u -d results.sqlite3 -l $library -G /path/to/input/graph500-26.properties -w 16 -r 16 --log /path/to/input/graph500-26-0.5-sq.graphlog --aging_timeout 10h --mixed_workload true -R 1 --is_timestamped true
+  done
+done
 ```
 
 The option `--aging_timeout` serves to limit the total time to execute the experiment.
@@ -366,22 +323,3 @@ if the memory footprint measured is greater than 330 GB and
 from the file, as it may (or may not) recycled by the libraries. 
 With the memory footprint, for LLAMA, it's not necessary to set `--aging_timeout 4h` as 
 `--aging_memfp_threshold 330G` already acts as a guard on the overall memory consumption.
-
-#### Mixed updates and analytics (Figure 14)
-
-For all combinations of reading ($r in \[1, 2, 4, 8, 16, 32\]) and writing threads ($w in \[16, 48\]).
-```bash
-# BFS
-./gfe_driver  -u  -R 3 -d results.sqlite3 -l sortledton.4 -G /path/to/graph500-24.properties -w $w -r $r --blacklist sssp,cdlp,pagerank,wcc,lcc --log /path/to/graph500-24-1.0.graphlog --aging_timeout 2h --mixed_workload true --block_size 512
-./gfe_driver  -u  -R 3 -d results.sqlite3 -l livegraph3_ro -G /path/to/graph500-24.properties -w $w -r $r --blacklist sssp,cdlp,pagerank,wcc,lcc --log /path/to/graph500-24-1.0.graphlog --aging_timeout 2h --mixed_workload true
-
-# Pagerank
-./gfe_driver  -u  -R 3 -d results.sqlite3 -l sortledton.4 -G /path/to/graph500-24.properties -w $w -r $r --blacklist sssp,cdlp,bfs,wcc,lcc --log /path/to/graph500-24-1.0.graphlog --aging_timeout 2h --mixed_workload true --block_size 512
-./gfe_driver  -u  -R 3 -d results.sqlite3 -l livegraph3_ro -G /path/to/graph500-24.properties -w $w -r $r --blacklist sssp,cdlp,bfs,wcc,lcc --log /path/to/graph500-24-1.0.graphlog --aging_timeout 2h --mixed_workload true
-```
-
-#### Produce Plots
-
-Download our data from [Zenodo](https://zenodo.org/record/5155577) or generate the data with scripts mentioned above.
-Then use the [GFE_Notebooks](https://github.com/PerFuchs/gfe_notebooks).
-Instructions for use within the other repository.

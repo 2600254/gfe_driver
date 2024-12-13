@@ -214,11 +214,23 @@ std::unique_ptr<Interface> generate_livegraph_rw(bool directed_graph){ // read-w
 #endif
 
 #if defined(HAVE_BACH)
-std::unique_ptr<Interface> generate_bach_ro(bool directed_graph){ // read only transactions for Graphalytics
-    return unique_ptr<Interface>( new BACHDriver(directed_graph, /*read_only ? */ true));
+std::unique_ptr<Interface> generate_bach_ro_leveling(bool directed_graph){ // read only transactions for Graphalytics
+    return unique_ptr<Interface>( new BACHDriver(directed_graph, /*read_only ? */ true, 0));
 }
-std::unique_ptr<Interface> generate_bach_rw(bool directed_graph){ // read-write transactions for Graphalytics
-    return unique_ptr<Interface>( new BACHDriver(directed_graph, /*read_only ? */ false));
+std::unique_ptr<Interface> generate_bach_rw_leveling(bool directed_graph){ // read-write transactions for Graphalytics
+    return unique_ptr<Interface>( new BACHDriver(directed_graph, /*read_only ? */ false, 0));
+}
+std::unique_ptr<Interface> generate_bach_ro_tiering(bool directed_graph){ // read only transactions for Graphalytics
+    return unique_ptr<Interface>( new BACHDriver(directed_graph, /*read_only ? */ true, 1));
+}
+std::unique_ptr<Interface> generate_bach_rw_tiering(bool directed_graph){ // read-write transactions for Graphalytics
+    return unique_ptr<Interface>( new BACHDriver(directed_graph, /*read_only ? */ false, 1));
+}
+std::unique_ptr<Interface> generate_bach_ro_elastic(bool directed_graph){ // read only transactions for Graphalytics
+    return unique_ptr<Interface>( new BACHDriver(directed_graph, /*read_only ? */ true, 2));
+}
+std::unique_ptr<Interface> generate_bach_rw_elastic(bool directed_graph){ // read-write transactions for Graphalytics
+    return unique_ptr<Interface>( new BACHDriver(directed_graph, /*read_only ? */ false, 2));
 }
 #endif
 
@@ -344,8 +356,12 @@ vector<ImplementationManifest> implementations() {
 #endif
 
 #if defined(HAVE_BACH)
-    result.emplace_back("bach_ro", "BACH, use read-only transactions for the Graphalytics kernels", &generate_bach_ro);
-    result.emplace_back("bach_rw", "BACH, use read-write transactions for the Graphalytics kernels", &generate_bach_rw);
+    result.emplace_back("bach_ro_leveling", "BACH, use read-only transactions and leveling merging strategy for the Graphalytics kernels", &generate_bach_ro_leveling);
+    result.emplace_back("bach_rw_leveling", "BACH, use read-write transactions and leveling merging strategy for the Graphalytics kernels", &generate_bach_rw_leveling);
+    result.emplace_back("bach_ro_tiering", "BACH, use read-only transactions and tiering merging strategy for the Graphalytics kernels", &generate_bach_ro_tiering);
+    result.emplace_back("bach_rw_tiering", "BACH, use read-write transactions and tiering merging strategy for the Graphalytics kernels", &generate_bach_rw_tiering);
+    result.emplace_back("bach_ro_elastic", "BACH, use read-only transactions and elastic merging strategy for the Graphalytics kernels", &generate_bach_ro_elastic);
+    result.emplace_back("bach_rw_elastic", "BACH, use read-write transactions and elastic merging strategy for the Graphalytics kernels", &generate_bach_rw_elastic);
 #endif
 
 #if defined(HAVE_ROCKSDB)

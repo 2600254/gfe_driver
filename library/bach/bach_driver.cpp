@@ -76,9 +76,10 @@ namespace gfe::library
      *  Init                                                                     *
      *                                                                           *
      *****************************************************************************/
-    BACHDriver::BACHDriver(bool is_directed, bool read_only) : m_pImpl(nullptr), m_pHashMap(nullptr), m_is_directed(is_directed), m_read_only(read_only)
+    BACHDriver::BACHDriver(bool is_directed, bool read_only, uint64_t merging_strategy) : m_pImpl(nullptr), m_pHashMap(nullptr), m_is_directed(is_directed), m_read_only(read_only)
     {
         auto o = std::make_shared<BACH::Options>();
+        o->MERGING_STRATEGY = static_cast<BACH::Options::MergingStrategy>(merging_strategy);
         m_pImpl = new bach::DB(o);
         db->AddVertexLabel("v");
         db->AddEdgeLabel("e", "v", "v");
@@ -436,6 +437,11 @@ namespace gfe::library
         }
 
         return weight;
+    }
+
+    void BACHDriver::build()
+    {
+        db->CompactAll();
     }
 
     /*****************************************************************************
