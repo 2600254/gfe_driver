@@ -2,12 +2,12 @@
 GFE Driver
 ---
 
-The GFE (Graph Framework Evaluation) Driver is the program used to run the experiments in "Sortledton: a universal
-graph data structure", measuring the throughput of updates in libraries supporting structural dynamic graphs and the completion times of 
+The GFE (Graph Framework Evaluation) Driver is the program used to run the experiments in "BACH: Bridging Adjacency List and CSR Format using LSM-Trees
+for HGTAP Workloads", measuring the throughput of updates in libraries supporting structural dynamic graphs and the completion times of 
 the [Graphalytics kernels](https://github.com/ldbc/ldbc_graphalytics). 
 The driver supports the following systems: [Sortledton](https://gitlab.db.in.tum.de/per.fuchs/sortledton), [Teseo](https://github.com/cwida/teseo), 
 [LLAMA](https://github.com/goatdb/llama), [GraphOne](https://github.com/the-data-lab/GraphOne), 
-[Stinger](http://stingergraph.com/) and [LiveGraph](https://github.com/thu-pacman/LiveGraph-Binary). 
+[Stinger](http://stingergraph.com/), [LiveGraph](https://github.com/thu-pacman/LiveGraph-Binary), [BACH](https://github.com/2600254/BACH) and [RocksDB](https://github.com/facebook/rocksdb). 
 Additionally, it supports running the microbenchmarks from the Sortledton paper: [Microbenchmarks](https://gitlab.db.in.tum.de/per.fuchs/graph-data-structure-microbenchmarks).
 It can run three kinds experiments: insert all edges in a random permuted order from an input graph, 
 execute the updates specified by a [graphlog file](https://github.com/whatsthecraic/graphlog) and run the kernels of
