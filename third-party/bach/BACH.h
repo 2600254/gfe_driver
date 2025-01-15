@@ -2,6 +2,7 @@
 #include <memory>
 #include <math.h>
 #include <vector>
+#include <functional>
 
 #pragma once
 
@@ -22,17 +23,17 @@ namespace BACH
 			TIERING,
 			ELASTIC
 		}
-		MERGING_STRATEGY = MergingStrategy::LEVELING;
-		size_t MEM_TABLE_MAX_SIZE = 1*1024*1024;//16*1024*1024
+		MERGING_STRATEGY = MergingStrategy::ELASTIC;
+		size_t MEM_TABLE_MAX_SIZE = 1 * 1024 * 1024;
 		size_t LEVEL_0_MAX_SIZE = 512 * 1024 * 1024;
-		size_t VERTEX_PROPERTY_MAX_SIZE = 1 * 1024 * 1024 * 1024;
+		size_t VERTEX_PROPERTY_MAX_SIZE = 512 * 1024 * 1024;
 		vertex_t MEMORY_MERGE_NUM = 8192;
 		vertex_t FILE_MERGE_NUM = 16;
 		size_t READ_BUFFER_SIZE = 1024 * 1024;
 		size_t WRITE_BUFFER_SIZE = 1024 * 1024;
 		size_t NUM_OF_COMPACTION_THREAD = 8;
 		size_t QUERY_LIST_SIZE = 160;
-		size_t MAX_FILE_READER_CACHE_SIZE = 256;
+		size_t MAX_FILE_READER_CACHE_SIZE = 768;
 		size_t MAX_WORKER_THREAD = 16;
 		double FALSE_POSITIVE = 0.01;
 		size_t MAX_LEVEL = 5;
@@ -62,7 +63,7 @@ namespace bach
 		void AddVertexLabel(std::string label_name);
 		void AddEdgeLabel(std::string label_name,
 			std::string src_label_name, std::string dst_label_name);
-		void CompactAll();
+		void CompactAll(double_t ratio);
 	private:
 		const std::unique_ptr<BACH::DB> db;
 	};
@@ -86,7 +87,7 @@ namespace bach
 			GetEdges(vertex_t src, label_t label,
 				const std::function<bool(edge_property_t&)>& func = [](edge_property_t x) {return true; });
 		void EdgeLabelScan(label_t label,
-			const std::function<void(vertex_t&, vertex_t&,edge_property_t&)>& func);
+			const std::function<void(vertex_t&, vertex_t&, edge_property_t&)>& func);
 
 	private:
 		const std::unique_ptr<BACH::Transaction> txn;

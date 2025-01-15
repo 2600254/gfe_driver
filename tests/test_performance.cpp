@@ -90,7 +90,7 @@ TEST(Performance, InsertOnly) {
     int num_threads = get_num_threads();
     cout << "[Performance::InsertOnly] Executing the insertions using " << num_threads << " threads ...\n";
     timer.start();
-    InsertOnly experiment(impl, move(stream), num_threads);
+    InsertOnly experiment(impl, move(stream), num_threads, false);
     experiment.execute();
     timer.stop();
     cout << "Execution completed in " << timer << "\n";
@@ -112,7 +112,7 @@ TEST(Performance, LCC) {
     int num_threads = get_num_threads();
     cout << "[Performance::LCC] Executing the insertions using " << num_threads << " threads ...\n";
     timer.start();
-    InsertOnly experiment(impl, move(stream), num_threads);
+    InsertOnly experiment(impl, move(stream), num_threads, false);
     experiment.execute();
     timer.stop();
     cout << "Execution completed in " << timer << "\n";

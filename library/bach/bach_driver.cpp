@@ -441,7 +441,7 @@ namespace gfe::library
 
     void BACHDriver::build()
     {
-        db->CompactAll();
+        db->CompactAll(0.7);
     }
 
     /*****************************************************************************
