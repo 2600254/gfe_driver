@@ -48,7 +48,7 @@ Instead, it is safer to reconfigure and rebuild the driver each time for a singl
 
 ##### BACH
 
-Download the library from https://github.com/2600254/BACH_demo. 
+Download the library from https://github.com/2600254/BACH. 
 
 ```
 mkdir build && cd build
@@ -60,7 +60,7 @@ Then configure the driver by pointing the path to the compiled dynamic library i
 
 ```
 mkdir build && cd build
-../configure --enable-optimize --disable-debug --with-bach=/path/to/BACH_demo/build
+../configure --enable-optimize --disable-debug --with-bach=/path/to/BACH/build
 ```
 
 ##### RocksDB

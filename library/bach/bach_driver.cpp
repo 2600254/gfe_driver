@@ -61,7 +61,7 @@ namespace gfe
         std::scoped_lock<std::mutex> lock{::gfe::_log_mutex};                                                                              \
         std::cout << "[BACHDriver::" << __FUNCTION__ << "] [Thread #" << common::concurrency::get_thread_id() << "] " << msg << std::endl; \
     }
-#define DEBUG
+//#define DEBUG
 #if defined(DEBUG)
 #define COUT_DEBUG(msg) COUT_DEBUG_FORCE(msg)
 #else
